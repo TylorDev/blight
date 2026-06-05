@@ -1,8 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Factory, Loader2, Plus, X } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
-import type { AppTier } from "../../electron/types";
-import { calculateTicketPreview, staffQuantity, tierLabels, tiers } from "../app-data";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import type { AppTier, LeftoverCreditView } from "../../electron/types";
+import { calculateTicketPreview, categoryLabels, formatCurrency, staffQuantity, tierLabels, tiers } from "../app-data";
 import { normalizeThousandsInput, parseThousands } from "../number-format";
 import { useStockStore } from "../stores/stock-store";
 import { useTicketStore } from "../stores/ticket-store";
@@ -14,11 +14,32 @@ export function TicketDialog() {
   const [open, setOpen] = useState(false);
   const [tier, setTier] = useState<AppTier>("T5");
   const [tax, setTax] = useState("1");
+  const [pendingLeftovers, setPendingLeftovers] = useState<LeftoverCreditView[]>([]);
   const [saving, setSaving] = useState(false);
+  const [loadingLeftovers, setLoadingLeftovers] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const stock = useStockStore((state) => state.stock);
   const createTicket = useTicketStore((state) => state.createTicket);
-  const preview = useMemo(() => calculateTicketPreview(stock, tier, parseThousands(tax)), [stock, tax, tier]);
+  const listPendingLeftoverCredits = useTicketStore((state) => state.listPendingLeftoverCredits);
+  const preview = useMemo(
+    () => calculateTicketPreview(stock, tier, parseThousands(tax), pendingLeftovers),
+    [pendingLeftovers, stock, tax, tier]
+  );
+  const pendingLeftoverTotal = pendingLeftovers.reduce((total, credit) => total + credit.value, 0);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setLoadingLeftovers(true);
+    listPendingLeftoverCredits(tier)
+      .then(setPendingLeftovers)
+      .catch((currentError) =>
+        setError(currentError instanceof Error ? currentError.message : "No se pudieron cargar las sobras.")
+      )
+      .finally(() => setLoadingLeftovers(false));
+  }, [listPendingLeftoverCredits, open, tier]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -47,6 +68,9 @@ export function TicketDialog() {
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className="modal">
           <Dialog.Title>Nuevo ticket</Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Crea un ticket de fabricacion seleccionando tier, tax y revisando el costo estimado.
+          </Dialog.Description>
           <form onSubmit={submit} className="form">
             <SelectField
               label="Tier"
@@ -69,7 +93,21 @@ export function TicketDialog() {
               Cantidad Bastones Total
               <input value={String(staffQuantity)} readOnly />
             </label>
-            <Recipe tier={tier} />
+            {loadingLeftovers ? <p className="modal-copy">Buscando sobras disponibles...</p> : null}
+            {!loadingLeftovers && pendingLeftovers.length > 0 ? (
+              <div className="leftover-note">
+                <strong>Sobras aplicadas al crear</strong>
+                <div className="consumption-list">
+                  {pendingLeftovers.map((credit) => (
+                    <span key={credit.id}>
+                      {categoryLabels[credit.category]} {credit.quantity} - {formatCurrency(credit.value)}
+                    </span>
+                  ))}
+                </div>
+                <span>Descuento total {formatCurrency(pendingLeftoverTotal)}</span>
+              </div>
+            ) : null}
+            <Recipe tier={tier} leftoverCredits={pendingLeftovers} />
             <TicketPreview preview={preview} />
             {error ? <p className="form-error">{error}</p> : null}
             <div className="modal-actions">

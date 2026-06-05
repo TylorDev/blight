@@ -1,4 +1,4 @@
-import type { AppTier, Category, StockItemView } from "../electron/types";
+import type { AppTier, Category, LeftoverCreditView, StockItemView } from "../electron/types";
 
 export const categories: Category[] = ["TABLAS", "TELAS", "DIARIOS_VACIOS", "ARTEFACTOS"];
 export const tiers: AppTier[] = ["T5", "T6", "T7", "T8"];
@@ -48,12 +48,40 @@ export function createEmptyBulkDraft() {
   ) as BulkPurchaseDraft;
 }
 
-export function calculateTicketPreview(stock: StockItemView[], tier: AppTier, rawTax: number) {
-  const taxValue = Number.isFinite(rawTax) && rawTax > 0 ? rawTax : 0;
-  const materials = [
-    ...recipeBase,
+export function getEffectiveRecipeMaterials(tier: AppTier, leftoverCredits: LeftoverCreditView[] = []) {
+  const leftoverQuantities = leftoverCredits.reduce(
+    (totals, credit) => {
+      if (credit.category === "TABLAS" || credit.category === "TELAS") {
+        totals[credit.category] += credit.quantity;
+      }
+      return totals;
+    },
+    { TABLAS: 0, TELAS: 0 }
+  );
+
+  return [
+    ...recipeBase.map((material) => {
+      if (material.category !== "TABLAS" && material.category !== "TELAS") {
+        return material;
+      }
+
+      return {
+        ...material,
+        quantity: Math.max(0, material.quantity - leftoverQuantities[material.category])
+      };
+    }),
     { category: "DIARIOS_VACIOS" as Category, quantity: recipeDiary[tier] }
-  ].map((material) => {
+  ];
+}
+
+export function calculateTicketPreview(
+  stock: StockItemView[],
+  tier: AppTier,
+  rawTax: number,
+  leftoverCredits: LeftoverCreditView[] = []
+) {
+  const taxValue = Number.isFinite(rawTax) && rawTax > 0 ? rawTax : 0;
+  const materials = getEffectiveRecipeMaterials(tier, leftoverCredits).map((material) => {
     const stockItem = stock.find((item) => item.category === material.category && item.tier === tier);
     const averageCost = stockItem?.averageCost ?? 0;
     return {

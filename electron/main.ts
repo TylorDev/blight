@@ -3,6 +3,7 @@ import { join } from "node:path";
 import {
   closeTicket,
   clearStock,
+  clearHistory,
   createBulkPurchase,
   createPurchase,
   createTicket,
@@ -16,7 +17,7 @@ import {
 } from "./inventory-service";
 import type { AppTier, CloseTicketInput, CreateBulkPurchaseInput, CreatePurchaseInput, CreateTicketInput } from "./types";
 
-const isDev = Boolean(process.env.VITE_DEV_SERVER_URL);
+const rendererUrl = process.env.ELECTRON_RENDERER_URL;
 
 const consoleLevels: Record<number, "log" | "warn" | "error"> = {
   0: "log",
@@ -63,8 +64,8 @@ function createWindow() {
     console.error(`[renderer] failed to load ${validatedURL}: ${errorDescription} (${errorCode})`);
   });
 
-  if (isDev && process.env.VITE_DEV_SERVER_URL) {
-    void window.loadURL(process.env.VITE_DEV_SERVER_URL);
+  if (rendererUrl) {
+    void window.loadURL(rendererUrl);
   } else {
     void window.loadFile(join(__dirname, "../renderer/index.html"));
   }
@@ -81,6 +82,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("ticket:list", () => listTickets());
   ipcMain.handle("ticket:listOpen", () => listOpenTickets());
   ipcMain.handle("history:list", () => listHistory());
+  ipcMain.handle("history:clear", () => clearHistory());
   ipcMain.handle("leftover:listPending", (_event, tier: AppTier) => listPendingLeftoverCredits(tier));
   ipcMain.handle("ticket:close", (_event, input: CloseTicketInput) => closeTicket(input));
 

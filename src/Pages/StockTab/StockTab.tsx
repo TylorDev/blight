@@ -49,7 +49,13 @@ export function StockTab() {
           />
         </div>
       </div>
-      {filteredStock.length > 0 ? <StockTable items={filteredStock} /> : <EmptyState text="No hay stock disponible." />}
+      {filteredStock.length > 0 ? (
+        <StockTable items={filteredStock} />
+      ) : (
+        <div className="stock-table stock-table--empty">
+          <EmptyState text="No hay stock disponible." />
+        </div>
+      )}
     </>
   );
 }

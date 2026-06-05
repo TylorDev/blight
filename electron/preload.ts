@@ -10,6 +10,7 @@ const api: AppApi = {
   listTickets: () => ipcRenderer.invoke("ticket:list"),
   listOpenTickets: () => ipcRenderer.invoke("ticket:listOpen"),
   listHistory: () => ipcRenderer.invoke("history:list"),
+  clearHistory: () => ipcRenderer.invoke("history:clear"),
   listPendingLeftoverCredits: (tier: AppTier) => ipcRenderer.invoke("leftover:listPending", tier),
   closeTicket: (input: CloseTicketInput) => ipcRenderer.invoke("ticket:close", input)
 };

@@ -50,6 +50,9 @@ export function PurchaseDialog() {
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className="modal">
           <Dialog.Title>Registrar compra</Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Registra una compra individual seleccionando categoria, tier, cantidad y precio total.
+          </Dialog.Description>
           <form onSubmit={submit} className="form">
             <SelectField
               label="Categoria"

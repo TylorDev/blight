@@ -34,7 +34,9 @@ export function ClearStockDialog() {
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className="modal">
           <Dialog.Title>Vaciar Stock</Dialog.Title>
-          <p className="modal-copy">Deja cantidades, totales y precios medios en cero. No borra historial ni tickets.</p>
+          <Dialog.Description className="modal-copy">
+            Deja cantidades, totales y precios medios en cero. No borra historial ni tickets.
+          </Dialog.Description>
           {error ? <p className="form-error">{error}</p> : null}
           <div className="modal-actions">
             <Dialog.Close asChild>

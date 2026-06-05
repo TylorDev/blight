@@ -295,21 +295,45 @@ export function createInventoryService(prisma: PrismaClient) {
       throw new Error("Tax debe estar entre 1 y 1000.");
     }
 
-    const ticket = await prisma.fabricationTicket.create({
-      data: {
-        tier: input.tier,
-        tax: input.tax,
-        staffQuantity,
-        craftingTax: calculateCraftingTax(input.tier, input.tax)
-      },
-      include: { consumptions: true }
+    const ticket = await prisma.$transaction(async (tx) => {
+      const pendingLeftoverCredits = await tx.ticketLeftoverCredit.findMany({
+        where: { tier: input.tier, appliedToTicketId: null },
+        orderBy: { createdAt: "asc" }
+      });
+      const appliedLeftoverDiscount = pendingLeftoverCredits.reduce((total, credit) => total + credit.value, 0);
+      const createdTicket = await tx.fabricationTicket.create({
+        data: {
+          tier: input.tier,
+          tax: input.tax,
+          staffQuantity,
+          craftingTax: calculateCraftingTax(input.tier, input.tax),
+          appliedLeftoverDiscount
+        },
+        include: { consumptions: true, appliedLeftoverCredits: true }
+      });
+
+      if (pendingLeftoverCredits.length > 0) {
+        await tx.ticketLeftoverCredit.updateMany({
+          where: { id: { in: pendingLeftoverCredits.map((credit) => credit.id) } },
+          data: {
+            appliedToTicketId: createdTicket.id,
+            appliedAt: new Date()
+          }
+        });
+      }
+
+      return tx.fabricationTicket.findUniqueOrThrow({
+        where: { id: createdTicket.id },
+        include: { consumptions: true, appliedLeftoverCredits: true }
+      });
     });
+
     return toTicketView(ticket);
   }
 
   async function listTickets(): Promise<FabricationTicketView[]> {
     const tickets = await prisma.fabricationTicket.findMany({
-      include: { consumptions: true },
+      include: { consumptions: true, appliedLeftoverCredits: true },
       orderBy: [{ status: "asc" }, { openedAt: "desc" }]
     });
     return tickets.map(toTicketView);
@@ -318,7 +342,7 @@ export function createInventoryService(prisma: PrismaClient) {
   async function listOpenTickets(): Promise<FabricationTicketView[]> {
     const tickets = await prisma.fabricationTicket.findMany({
       where: { status: TicketStatus.ABIERTO },
-      include: { consumptions: true },
+      include: { consumptions: true, appliedLeftoverCredits: true },
       orderBy: { openedAt: "desc" }
     });
     return tickets.map(toTicketView);
@@ -327,10 +351,40 @@ export function createInventoryService(prisma: PrismaClient) {
   async function listHistory(): Promise<FabricationTicketView[]> {
     const tickets = await prisma.fabricationTicket.findMany({
       where: { status: TicketStatus.CERRADO },
-      include: { consumptions: true },
+      include: { consumptions: true, appliedLeftoverCredits: true },
       orderBy: { closedAt: "desc" }
     });
     return tickets.map(toTicketView);
+  }
+
+  async function clearHistory(): Promise<FabricationTicketView[]> {
+    await prisma.$transaction(async (tx) => {
+      const closedTickets = await tx.fabricationTicket.findMany({
+        where: { status: TicketStatus.CERRADO },
+        select: { id: true }
+      });
+      const ticketIds = closedTickets.map((ticket) => ticket.id);
+
+      if (ticketIds.length === 0) {
+        return;
+      }
+
+      await tx.ticketLeftoverCredit.deleteMany({
+        where: {
+          OR: [{ sourceTicketId: { in: ticketIds } }, { appliedToTicketId: { in: ticketIds } }]
+        }
+      });
+      await tx.ticketConsumption.deleteMany({ where: { ticketId: { in: ticketIds } } });
+      await tx.stockMovement.deleteMany({
+        where: {
+          type: "CONSUMO",
+          ticketId: { in: ticketIds }
+        }
+      });
+      await tx.fabricationTicket.deleteMany({ where: { id: { in: ticketIds } } });
+    });
+
+    return listHistory();
   }
 
   async function listPendingLeftoverCredits(tier: Tier): Promise<LeftoverCreditView[]> {
@@ -347,7 +401,7 @@ export function createInventoryService(prisma: PrismaClient) {
     const result = await prisma.$transaction(async (tx) => {
       const ticket = await tx.fabricationTicket.findUnique({
         where: { id: input.ticketId },
-        include: { consumptions: true }
+        include: { consumptions: true, appliedLeftoverCredits: true }
       });
 
       if (!ticket) {
@@ -358,7 +412,7 @@ export function createInventoryService(prisma: PrismaClient) {
         return { ok: true, ticket: toTicketView(ticket) };
       }
 
-      const materials = recipe[ticket.tier];
+      const materials = getEffectiveRecipe(ticket.tier, ticket.appliedLeftoverCredits);
       const tablesRequired = getRequiredQuantity(ticket.tier, StockCategory.TABLAS);
       const clothsRequired = getRequiredQuantity(ticket.tier, StockCategory.TELAS);
       if (input.leftoverTablesQuantity > tablesRequired || input.leftoverClothsQuantity > clothsRequired) {
@@ -396,8 +450,12 @@ export function createInventoryService(prisma: PrismaClient) {
           throw new Error("Stock incompleto.");
         }
 
-        const discountedTotal = material.quantity * item.averageCost;
         usedAverageCosts.set(material.category, item.averageCost);
+        if (material.quantity === 0) {
+          continue;
+        }
+
+        const discountedTotal = material.quantity * item.averageCost;
         const nextQuantity = item.quantity - material.quantity;
         const nextTotal = Math.max(0, item.total - discountedTotal);
         const nextAverageCost = nextQuantity > 0 ? nextTotal / nextQuantity : 0;
@@ -441,32 +499,13 @@ export function createInventoryService(prisma: PrismaClient) {
         },
         0
       );
-      const pendingLeftoverCredits = await tx.ticketLeftoverCredit.findMany({
-        where: {
-          tier: ticket.tier,
-          appliedToTicketId: null,
-          sourceTicketId: { not: ticket.id }
-        },
-        orderBy: { createdAt: "asc" }
-      });
-      const appliedLeftoverDiscount = pendingLeftoverCredits.reduce((total, credit) => total + credit.value, 0);
       const leftoverTablesValue = input.leftoverTablesQuantity * (usedAverageCosts.get(StockCategory.TABLAS) ?? 0);
       const leftoverClothsValue = input.leftoverClothsQuantity * (usedAverageCosts.get(StockCategory.TELAS) ?? 0);
-      const investmentTotal = materialTotal + ticket.craftingTax - input.filledDiariesDiscount - appliedLeftoverDiscount;
+      const investmentTotal = materialTotal + ticket.craftingTax - input.filledDiariesDiscount;
       if (investmentTotal < 0) {
         throw new Error("Los descuentos no pueden dejar la inversion total por debajo de cero.");
       }
       const unitCost = investmentTotal / ticket.staffQuantity;
-
-      for (const credit of pendingLeftoverCredits) {
-        await tx.ticketLeftoverCredit.update({
-          where: { id: credit.id },
-          data: {
-            appliedToTicketId: ticket.id,
-            appliedAt: new Date()
-          }
-        });
-      }
 
       if (input.leftoverTablesQuantity > 0) {
         await tx.ticketLeftoverCredit.create({
@@ -504,11 +543,11 @@ export function createInventoryService(prisma: PrismaClient) {
           leftoverTablesValue,
           leftoverClothsQuantity: Math.trunc(input.leftoverClothsQuantity),
           leftoverClothsValue,
-          appliedLeftoverDiscount,
+          appliedLeftoverDiscount: ticket.appliedLeftoverDiscount,
           investmentTotal,
           unitCost
         },
-        include: { consumptions: true }
+        include: { consumptions: true, appliedLeftoverCredits: true }
       });
 
       return { ok: true, ticket: toTicketView(closedTicket) };
@@ -532,6 +571,7 @@ export function createInventoryService(prisma: PrismaClient) {
     listTickets,
     listOpenTickets,
     listHistory,
+    clearHistory,
     listPendingLeftoverCredits,
     closeTicket,
     disconnectPrisma
@@ -555,6 +595,7 @@ export const createTicket = (input: CreateTicketInput) => getDefaultService().cr
 export const listTickets = () => getDefaultService().listTickets();
 export const listOpenTickets = () => getDefaultService().listOpenTickets();
 export const listHistory = () => getDefaultService().listHistory();
+export const clearHistory = () => getDefaultService().clearHistory();
 export const listPendingLeftoverCredits = (tier: Tier) => getDefaultService().listPendingLeftoverCredits(tier);
 export const closeTicket = (input: CloseTicketInput) => getDefaultService().closeTicket(input);
 export const disconnectPrisma = () => getDefaultService().disconnectPrisma();
@@ -604,6 +645,17 @@ function toTicketView(ticket: {
     discountedTotal: number;
     averageCostUsed: number;
   }>;
+  appliedLeftoverCredits: Array<{
+    id: string;
+    tier: Tier;
+    category: StockCategory;
+    quantity: number;
+    value: number;
+    sourceTicketId: string;
+    appliedToTicketId: string | null;
+    createdAt: Date;
+    appliedAt: Date | null;
+  }>;
 }): FabricationTicketView {
   return {
     id: ticket.id,
@@ -631,7 +683,8 @@ function toTicketView(ticket: {
       quantity: consumption.quantity,
       discountedTotal: consumption.discountedTotal,
       averageCostUsed: consumption.averageCostUsed
-    }))
+    })),
+    appliedLeftoverCredits: ticket.appliedLeftoverCredits.map(toLeftoverCreditView)
   };
 }
 
@@ -677,6 +730,35 @@ function validateCloseTicketInput(input: CloseTicketInput) {
 
 function getRequiredQuantity(tier: Tier, category: StockCategory) {
   return recipe[tier].find((material) => material.category === category)?.quantity ?? 0;
+}
+
+function getEffectiveRecipe(
+  tier: Tier,
+  appliedLeftoverCredits: Array<{ category: StockCategory; quantity: number }>
+) {
+  const leftoverQuantities = appliedLeftoverCredits.reduce(
+    (totals, credit) => {
+      if (credit.category === StockCategory.TABLAS || credit.category === StockCategory.TELAS) {
+        totals[credit.category] += credit.quantity;
+      }
+      return totals;
+    },
+    {
+      [StockCategory.TABLAS]: 0,
+      [StockCategory.TELAS]: 0
+    }
+  );
+
+  return recipe[tier].map((material) => {
+    if (material.category !== StockCategory.TABLAS && material.category !== StockCategory.TELAS) {
+      return material;
+    }
+
+    return {
+      ...material,
+      quantity: Math.max(0, material.quantity - leftoverQuantities[material.category])
+    };
+  });
 }
 
 async function addColumnIfMissing(prisma: PrismaClient, tableName: string, columnName: string, definition: string) {

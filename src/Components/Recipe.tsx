@@ -1,13 +1,14 @@
-import type { AppTier } from "../../electron/types";
-import { recipeDiary } from "../app-data";
+import type { AppTier, LeftoverCreditView } from "../../electron/types";
+import { categoryLabels, getEffectiveRecipeMaterials } from "../app-data";
 
-export function Recipe({ tier }: { tier: AppTier }) {
+export function Recipe({ tier, leftoverCredits = [] }: { tier: AppTier; leftoverCredits?: LeftoverCreditView[] }) {
   return (
     <div className="recipe">
-      <span>73 Tablas</span>
-      <span>44 Telas</span>
-      <span>6 Artefactos</span>
-      <span>{recipeDiary[tier]} Diarios</span>
+      {getEffectiveRecipeMaterials(tier, leftoverCredits).map((material) => (
+        <span key={material.category}>
+          {material.quantity} {categoryLabels[material.category]}
+        </span>
+      ))}
     </div>
   );
 }

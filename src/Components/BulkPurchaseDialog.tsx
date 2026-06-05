@@ -83,6 +83,9 @@ export function BulkPurchaseDialog() {
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className="modal bulk-modal">
           <Dialog.Title>Compra Masiva</Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Registra varias compras para un mismo tier completando cantidad y total por item.
+          </Dialog.Description>
           <form onSubmit={submit} className="form">
             <SelectField
               label="Tier"

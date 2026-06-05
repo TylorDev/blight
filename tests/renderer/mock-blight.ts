@@ -22,6 +22,7 @@ export function installBlightMock() {
     listTickets: vi.fn(),
     listOpenTickets: vi.fn(),
     listHistory: vi.fn(),
+    clearHistory: vi.fn(),
     listPendingLeftoverCredits: vi.fn(),
     closeTicket: vi.fn()
   };
@@ -67,6 +68,7 @@ export function createTicket(overrides: Partial<FabricationTicketView> = {}): Fa
     openedAt: "2026-01-01T00:00:00.000Z",
     closedAt: null,
     consumptions: [],
+    appliedLeftoverCredits: [],
     ...overrides
   };
 }

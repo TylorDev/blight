@@ -334,19 +334,56 @@ describe("tickets", () => {
     );
 
     const secondTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    const stockBeforeSecondClose = await service.listStock();
     const secondClose = await service.closeTicket(closeInput(secondTicket.id));
+    const stockAfterSecondClose = await service.listStock();
     const thirdTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
     const thirdClose = await service.closeTicket(closeInput(thirdTicket.id));
     const appliedCredits = await prisma.ticketLeftoverCredit.findMany({
       where: { appliedToTicketId: secondTicket.id }
     });
 
+    expect(secondTicket.appliedLeftoverCredits).toHaveLength(2);
+    expect(secondTicket.appliedLeftoverDiscount).toBe(19000);
     expect(secondClose.ok).toBe(true);
     expect(secondClose.ticket?.appliedLeftoverDiscount).toBe(19000);
     expect(secondClose.ticket?.investmentTotal).toBeCloseTo(129048, 4);
+    expect(secondClose.ticket?.investmentTotal).toBeCloseTo(
+      (secondClose.ticket?.materialTotal ?? 0) + (secondClose.ticket?.craftingTax ?? 0),
+      4
+    );
+    expect(stockItem(stockAfterSecondClose, StockCategory.TABLAS, Tier.T5).quantity).toBe(
+      stockItem(stockBeforeSecondClose, StockCategory.TABLAS, Tier.T5).quantity - 61
+    );
+    expect(stockItem(stockAfterSecondClose, StockCategory.TELAS, Tier.T5).quantity).toBe(
+      stockItem(stockBeforeSecondClose, StockCategory.TELAS, Tier.T5).quantity - 37
+    );
     expect(appliedCredits).toHaveLength(2);
     expect(thirdClose.ok).toBe(true);
     expect(thirdClose.ticket?.appliedLeftoverDiscount).toBe(0);
+  });
+
+  it("uses effective leftover-adjusted quantities when checking missing stock", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+
+    const firstTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    await service.closeTicket(closeInput(firstTicket.id, { leftoverTablesQuantity: 12 }));
+    await service.clearStock();
+    await service.createPurchase({ category: StockCategory.TABLAS, tier: Tier.T5, quantity: 61, total: 61000 });
+    await service.createPurchase({ category: StockCategory.TELAS, tier: Tier.T5, quantity: 44, total: 44000 });
+    await service.createPurchase({ category: StockCategory.ARTEFACTOS, tier: Tier.T5, quantity: 6, total: 6000 });
+    await service.createPurchase({
+      category: StockCategory.DIARIOS_VACIOS,
+      tier: Tier.T5,
+      quantity: 19,
+      total: 19000
+    });
+
+    const secondTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    const result = await service.closeTicket(closeInput(secondTicket.id));
+
+    expect(result.ok).toBe(true);
+    expect(result.ticket?.consumptions.find((item) => item.category === StockCategory.TABLAS)?.quantity).toBe(61);
   });
 
   it("does not apply leftovers to another tier", async () => {
@@ -420,6 +457,42 @@ describe("tickets", () => {
     expect(closedTicket?.consumptions).toHaveLength(4);
     expect(closedTicket?.investmentTotal).toBeCloseTo(148048, 4);
     expect(closedTicket?.unitCost).toBeCloseTo(24674.6667, 4);
+  });
+});
+
+describe("clearHistory", () => {
+  it("deletes closed tickets and related history without touching open tickets or stock", async () => {
+    await seedRecipeStock(Tier.T5, 220, 1000);
+
+    const firstTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    await service.closeTicket(closeInput(firstTicket.id, { leftoverTablesQuantity: 12, leftoverClothsQuantity: 7 }));
+    const secondTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    await service.closeTicket(closeInput(secondTicket.id));
+    const openTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    const stockBeforeClear = await service.listStock();
+
+    const history = await service.clearHistory();
+    const openTickets = await service.listOpenTickets();
+    const stockAfterClear = await service.listStock();
+
+    expect(history).toEqual([]);
+    expect(openTickets.map((ticket) => ticket.id)).toContain(openTicket.id);
+    expect(await prisma.ticketConsumption.count()).toBe(0);
+    expect(await prisma.ticketLeftoverCredit.count()).toBe(0);
+    expect(await prisma.stockMovement.count({ where: { type: "CONSUMO" } })).toBe(0);
+    expect(await prisma.stockMovement.count({ where: { type: "COMPRA" } })).toBe(4);
+    expect(stockAfterClear).toEqual(stockBeforeClear);
+  });
+
+  it("is a no-op when the history is already empty", async () => {
+    const openTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+
+    const history = await service.clearHistory();
+    const openTickets = await service.listOpenTickets();
+
+    expect(history).toEqual([]);
+    expect(openTickets).toHaveLength(1);
+    expect(openTickets[0].id).toBe(openTicket.id);
   });
 });
 

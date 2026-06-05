@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Loader2, X } from "lucide-react";
-import { FormEvent, useEffect, useState } from "react";
-import type { FabricationTicketView, LeftoverCreditView } from "../../../electron/types";
+import { FormEvent, useState } from "react";
+import type { FabricationTicketView } from "../../../electron/types";
 import { categoryLabels, formatCurrency, formatDate } from "../../app-data";
 import { EmptyState, Recipe, TicketCosts, TierBadge } from "../../Components";
 import { normalizeThousandsInput, parseThousands } from "../../number-format";
@@ -30,7 +30,7 @@ export function TicketTab() {
               <span>{formatDate(ticket.openedAt)}</span>
             </div>
             <TicketCosts ticket={ticket} compact />
-            <Recipe tier={ticket.tier} />
+            <Recipe tier={ticket.tier} leftoverCredits={ticket.appliedLeftoverCredits} />
             <CloseTicketDialog ticket={ticket} />
           </article>
         ))}
@@ -45,30 +45,13 @@ function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView }) {
   const [filledDiariesDiscount, setFilledDiariesDiscount] = useState("0");
   const [leftoverTablesQuantity, setLeftoverTablesQuantity] = useState("0");
   const [leftoverClothsQuantity, setLeftoverClothsQuantity] = useState("0");
-  const [pendingCredits, setPendingCredits] = useState<LeftoverCreditView[]>([]);
   const [saving, setSaving] = useState(false);
-  const [loadingCredits, setLoadingCredits] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const closeTicket = useTicketStore((state) => state.closeTicket);
   const clearTicketError = useTicketStore((state) => state.clearError);
   const setMissingMaterials = useTicketStore((state) => state.setMissingMaterials);
-  const listPendingLeftoverCredits = useTicketStore((state) => state.listPendingLeftoverCredits);
   const loadStock = useStockStore((state) => state.loadStock);
   const loadHistory = useHistoryStore((state) => state.loadHistory);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setLoadingCredits(true);
-    listPendingLeftoverCredits(ticket.tier)
-      .then(setPendingCredits)
-      .catch((currentError) =>
-        setError(currentError instanceof Error ? currentError.message : "No se pudieron cargar las sobras.")
-      )
-      .finally(() => setLoadingCredits(false));
-  }, [listPendingLeftoverCredits, open, ticket.tier]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -104,8 +87,6 @@ function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView }) {
     }
   };
 
-  const pendingTotal = pendingCredits.reduce((total, credit) => total + credit.value, 0);
-
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
@@ -118,24 +99,10 @@ function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView }) {
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className="modal">
           <Dialog.Title>Cerrar ticket {ticket.tier}</Dialog.Title>
+          <Dialog.Description className="sr-only">
+            Cierra el ticket registrando diarios llenos y nuevas sobras para futuros tickets.
+          </Dialog.Description>
           <form onSubmit={submit} className="form">
-            <div className="pending-box">
-              <strong>Sobras pendientes</strong>
-              {loadingCredits ? <span>Cargando...</span> : null}
-              {!loadingCredits && pendingCredits.length === 0 ? <span>Sin sobras para aplicar.</span> : null}
-              {!loadingCredits && pendingCredits.length > 0 ? (
-                <>
-                  <div className="consumption-list">
-                    {pendingCredits.map((credit) => (
-                      <span key={credit.id}>
-                        {categoryLabels[credit.category]} {credit.quantity} - {formatCurrency(credit.value)}
-                      </span>
-                    ))}
-                  </div>
-                  <span>Total aplicado {formatCurrency(pendingTotal)}</span>
-                </>
-              ) : null}
-            </div>
             <label className="field">
               Cantidad de diarios llenos
               <input

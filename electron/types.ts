@@ -41,6 +41,7 @@ export interface FabricationTicketView {
   openedAt: string;
   closedAt: string | null;
   consumptions: TicketConsumptionView[];
+  appliedLeftoverCredits: LeftoverCreditView[];
 }
 
 export interface MissingMaterial {
@@ -104,6 +105,7 @@ export interface AppApi {
   listTickets: () => Promise<FabricationTicketView[]>;
   listOpenTickets: () => Promise<FabricationTicketView[]>;
   listHistory: () => Promise<FabricationTicketView[]>;
+  clearHistory: () => Promise<FabricationTicketView[]>;
   listPendingLeftoverCredits: (tier: AppTier) => Promise<LeftoverCreditView[]>;
   closeTicket: (input: CloseTicketInput) => Promise<CloseTicketResult>;
 }
