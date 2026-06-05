@@ -1,0 +1,40 @@
+.ticket-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 12px;
+  padding: 16px;
+}
+
+.ticket-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 14px;
+  background: #111113;
+}
+
+.ticket-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  span:last-child {
+    color: #a1a1aa;
+    font-size: 12px;
+  }
+}
+
+.pending-box {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 12px;
+  background: #09090b;
+
+  span {
+    color: #a1a1aa;
+    font-size: 13px;
+  }
+}

@@ -8,6 +8,8 @@ import {
   createTicket,
   disconnectPrisma,
   initializeDatabase,
+  listHistory,
+  listOpenTickets,
   listPendingLeftoverCredits,
   listStock,
   listTickets
@@ -77,6 +79,8 @@ app.whenReady().then(async () => {
   ipcMain.handle("purchase:createBulk", (_event, input: CreateBulkPurchaseInput) => createBulkPurchase(input));
   ipcMain.handle("ticket:create", (_event, input: CreateTicketInput) => createTicket(input));
   ipcMain.handle("ticket:list", () => listTickets());
+  ipcMain.handle("ticket:listOpen", () => listOpenTickets());
+  ipcMain.handle("history:list", () => listHistory());
   ipcMain.handle("leftover:listPending", (_event, tier: AppTier) => listPendingLeftoverCredits(tier));
   ipcMain.handle("ticket:close", (_event, input: CloseTicketInput) => closeTicket(input));
 

@@ -251,69 +251,38 @@ h2 {
   }
 }
 
-.table {
-  display: grid;
-}
-
-.row {
-  display: grid;
-  grid-template-columns: 1.5fr 0.7fr 1fr 1fr 1fr;
-  align-items: center;
-  gap: 14px;
-  min-height: 44px;
-  border-bottom: 1px solid #18181b;
-  padding: 0 16px;
-  color: #e4e4e7;
-
-  &:last-child {
-    border-bottom: 0;
-  }
-}
-
-.row.head {
-  min-height: 38px;
-  color: #71717a;
-  font-size: 12px;
-  text-transform: uppercase;
-}
-
-.badge {
+.tier-badge {
   display: inline-flex;
-  width: fit-content;
-  border: 1px solid #3f3f46;
-  border-radius: 999px;
-  padding: 2px 8px;
-  color: #d4d4d8;
-  font-size: 12px;
-}
-
-.ticket-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
-  gap: 12px;
-  padding: 16px;
-}
-
-.ticket-card,
-.history-item {
-  display: grid;
-  gap: 12px;
-  border: 1px solid #27272a;
-  border-radius: 8px;
-  padding: 14px;
-  background: #111113;
-}
-
-.ticket-card > div:first-child,
-.history-title {
-  display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
+  width: fit-content;
+  min-width: 34px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  padding: 2px 9px;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+}
 
-  span {
-    color: #a1a1aa;
-    font-size: 12px;
-  }
+.tier-badge--t5 {
+  background: rgba(220, 38, 38, 0.18);
+  color: #fca5a5;
+}
+
+.tier-badge--t6 {
+  background: rgba(234, 88, 12, 0.18);
+  color: #fdba74;
+}
+
+.tier-badge--t7 {
+  background: rgba(234, 179, 8, 0.16);
+  color: #fde047;
+}
+
+.tier-badge--t8 {
+  background: rgba(250, 250, 250, 0.12);
+  color: #fafafa;
 }
 
 .recipe,
@@ -338,12 +307,6 @@ h2 {
 
 .cost-grid.compact span:nth-child(n + 4) {
   display: none;
-}
-
-.history-list {
-  display: grid;
-  gap: 12px;
-  padding: 16px;
 }
 
 .empty {
@@ -393,20 +356,6 @@ h2 {
   line-height: 1.5;
 }
 
-.pending-box {
-  display: grid;
-  gap: 8px;
-  border: 1px solid #27272a;
-  border-radius: 8px;
-  padding: 12px;
-  background: #09090b;
-
-  span {
-    color: #a1a1aa;
-    font-size: 13px;
-  }
-}
-
 .bulk-table {
   display: grid;
   border: 1px solid #27272a;
@@ -439,6 +388,12 @@ h2 {
   input {
     min-height: 34px;
   }
+}
+
+.bulk-item-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .bulk-head {
@@ -617,7 +572,4 @@ input,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .row {
-    grid-template-columns: 1.3fr 0.6fr 0.8fr 1fr 1fr;
-  }
 }

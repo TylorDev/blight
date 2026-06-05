@@ -315,6 +315,24 @@ export function createInventoryService(prisma: PrismaClient) {
     return tickets.map(toTicketView);
   }
 
+  async function listOpenTickets(): Promise<FabricationTicketView[]> {
+    const tickets = await prisma.fabricationTicket.findMany({
+      where: { status: TicketStatus.ABIERTO },
+      include: { consumptions: true },
+      orderBy: { openedAt: "desc" }
+    });
+    return tickets.map(toTicketView);
+  }
+
+  async function listHistory(): Promise<FabricationTicketView[]> {
+    const tickets = await prisma.fabricationTicket.findMany({
+      where: { status: TicketStatus.CERRADO },
+      include: { consumptions: true },
+      orderBy: { closedAt: "desc" }
+    });
+    return tickets.map(toTicketView);
+  }
+
   async function listPendingLeftoverCredits(tier: Tier): Promise<LeftoverCreditView[]> {
     const credits = await prisma.ticketLeftoverCredit.findMany({
       where: { tier, appliedToTicketId: null },
@@ -512,6 +530,8 @@ export function createInventoryService(prisma: PrismaClient) {
     createBulkPurchase,
     createTicket,
     listTickets,
+    listOpenTickets,
+    listHistory,
     listPendingLeftoverCredits,
     closeTicket,
     disconnectPrisma
@@ -533,6 +553,8 @@ export const createPurchase = (input: CreatePurchaseInput) => getDefaultService(
 export const createBulkPurchase = (input: CreateBulkPurchaseInput) => getDefaultService().createBulkPurchase(input);
 export const createTicket = (input: CreateTicketInput) => getDefaultService().createTicket(input);
 export const listTickets = () => getDefaultService().listTickets();
+export const listOpenTickets = () => getDefaultService().listOpenTickets();
+export const listHistory = () => getDefaultService().listHistory();
 export const listPendingLeftoverCredits = (tier: Tier) => getDefaultService().listPendingLeftoverCredits(tier);
 export const closeTicket = (input: CloseTicketInput) => getDefaultService().closeTicket(input);
 export const disconnectPrisma = () => getDefaultService().disconnectPrisma();

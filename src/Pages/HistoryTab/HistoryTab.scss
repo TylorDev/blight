@@ -1,0 +1,25 @@
+.history-list {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.history-item {
+  display: grid;
+  gap: 12px;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 14px;
+  background: #111113;
+}
+
+.history-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  span:last-child {
+    color: #a1a1aa;
+    font-size: 12px;
+  }
+}

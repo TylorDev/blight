@@ -1,11 +1,9 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import * as Select from "@radix-ui/react-select";
 import * as Tabs from "@radix-ui/react-tabs";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
   Archive,
   Check,
-  ChevronDown,
   CircleDollarSign,
   Factory,
   History,
@@ -16,91 +14,48 @@ import {
   X
 } from "lucide-react";
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import type {
-  AppTier,
-  Category,
-  FabricationTicketView,
-  LeftoverCreditView,
-  StockItemView
-} from "../electron/types";
-
-const categories: Category[] = ["TABLAS", "TELAS", "DIARIOS_VACIOS", "ARTEFACTOS"];
-const tiers: AppTier[] = ["T5", "T6", "T7", "T8"];
-
-const categoryLabels: Record<Category, string> = {
-  TABLAS: "Tablas",
-  TELAS: "Telas",
-  DIARIOS_VACIOS: "Diarios Vacios",
-  ARTEFACTOS: "Artefactos"
-};
-
-const recipeDiary: Record<AppTier, number> = {
-  T5: 19,
-  T6: 14,
-  T7: 8,
-  T8: 4
-};
-const staffQuantity = 6;
-const craftingTaxBase = 10.08;
-const craftingTaxMultipliers: Record<AppTier, number> = {
-  T5: 1,
-  T6: 1.0858,
-  T7: 1.1578,
-  T8: 1.2729
-};
-const recipeBase: Array<{ category: Category; quantity: number }> = [
-  { category: "TABLAS", quantity: 73 },
-  { category: "TELAS", quantity: 44 },
-  { category: "ARTEFACTOS", quantity: 6 }
-];
-
-type FilterValue<T extends string> = T | "TODOS";
+import type { AppTier, Category } from "../electron/types";
+import {
+  calculateTicketPreview,
+  categories,
+  categoryLabels,
+  createEmptyBulkDraft,
+  formatCurrency,
+  formatNumber,
+  staffQuantity,
+  tierLabels,
+  tiers
+} from "./app-data";
+import { Metric, Recipe, SelectField, TierBadge } from "./components";
+import { HistoryTab } from "./Pages/HistoryTab/HistoryTab";
+import { StockTab } from "./Pages/StockTab/StockTab";
+import { TicketTab } from "./Pages/TicketTab/TicketTab";
+import { useHistoryStore } from "./stores/history-store";
+import { selectStockTotals, useStockStore } from "./stores/stock-store";
+import { useTicketStore } from "./stores/ticket-store";
 
 function App() {
-  const [stock, setStock] = useState<StockItemView[]>([]);
-  const [tickets, setTickets] = useState<FabricationTicketView[]>([]);
-  const [categoryFilter, setCategoryFilter] = useState<FilterValue<Category>>("TODOS");
-  const [tierFilter, setTierFilter] = useState<FilterValue<AppTier>>("TODOS");
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [missing, setMissing] = useState<string[]>([]);
-
-  const refresh = async () => {
-    const [stockItems, ticketItems] = await Promise.all([
-      window.blight.listStock(),
-      window.blight.listTickets()
-    ]);
-    setStock(stockItems);
-    setTickets(ticketItems);
-  };
+  const stockError = useStockStore((state) => state.error);
+  const loadStock = useStockStore((state) => state.loadStock);
+  const totals = useStockStore(selectStockTotals);
+  const openTicketsCount = useTicketStore((state) => state.tickets.length);
+  const ticketError = useTicketStore((state) => state.error);
+  const missingMaterials = useTicketStore((state) => state.missingMaterials);
+  const loadTickets = useTicketStore((state) => state.loadTickets);
+  const closedTicketsCount = useHistoryStore((state) => state.tickets.length);
+  const historyError = useHistoryStore((state) => state.error);
+  const loadHistory = useHistoryStore((state) => state.loadHistory);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
-    refresh()
-      .catch((currentError) => setError(currentError.message))
-      .finally(() => setLoading(false));
-  }, []);
+    void Promise.all([loadStock(), loadTickets(), loadHistory()])
+      .catch(() => undefined)
+      .finally(() => setInitialLoading(false));
+  }, [loadHistory, loadStock, loadTickets]);
 
-  const filteredStock = useMemo(() => {
-    return stock.filter((item) => {
-      const categoryMatches = categoryFilter === "TODOS" || item.category === categoryFilter;
-      const tierMatches = tierFilter === "TODOS" || item.tier === tierFilter;
-      return categoryMatches && tierMatches;
-    });
-  }, [categoryFilter, stock, tierFilter]);
+  const errors = [stockError, ticketError, historyError].filter(Boolean);
 
-  const openTickets = tickets.filter((ticket) => ticket.status === "ABIERTO");
-  const closedTickets = tickets.filter((ticket) => ticket.status === "CERRADO");
-  const totals = useMemo(() => {
-    return stock.reduce(
-      (summary, item) => ({
-        quantity: summary.quantity + item.quantity,
-        total: summary.total + item.total
-      }),
-      { quantity: 0, total: 0 }
-    );
-  }, [stock]);
-
-  if (loading) {
+  if (initialLoading) {
     return (
       <div className="boot">
         <Loader2 className="spin" />
@@ -118,24 +73,28 @@ function App() {
             <h1>Inventario y fabricacion</h1>
           </div>
           <div className="actions">
-            <PurchaseDialog onSaved={refresh} />
-            <BulkPurchaseDialog onSaved={refresh} />
-            <ClearStockDialog onSaved={refresh} />
-            <TicketDialog stock={stock} onSaved={refresh} />
+            <PurchaseDialog />
+            <BulkPurchaseDialog />
+            <ClearStockDialog />
+            <TicketDialog />
           </div>
         </header>
 
         <section className="metrics">
           <Metric icon={<Archive />} label="Stock total" value={formatNumber(totals.quantity)} />
           <Metric icon={<CircleDollarSign />} label="Valor inventario" value={formatCurrency(totals.total)} />
-          <Metric icon={<Factory />} label="Tickets abiertos" value={String(openTickets.length)} />
-          <Metric icon={<History />} label="Fabricaciones" value={String(closedTickets.length)} />
+          <Metric icon={<Factory />} label="Tickets abiertos" value={String(openTicketsCount)} />
+          <Metric icon={<History />} label="Fabricaciones" value={String(closedTicketsCount)} />
         </section>
 
-        {error ? <div className="notice danger">{error}</div> : null}
-        {missing && missing.length > 0 ? (
+        {errors.map((error) => (
+          <div className="notice danger" key={error}>
+            {error}
+          </div>
+        ))}
+        {missingMaterials.length > 0 ? (
           <div className="notice danger">
-            Faltan materiales: {missing.join(", ")}
+            Faltan materiales: {missingMaterials.join(", ")}
           </div>
         ) : null}
 
@@ -147,65 +106,15 @@ function App() {
           </Tabs.List>
 
           <Tabs.Content value="stock" className="panel">
-            <div className="panel-head">
-              <div>
-                <h2>Stock</h2>
-                <span>{filteredStock.length} items</span>
-              </div>
-              <div className="filters">
-                <SelectField
-                  value={categoryFilter}
-                  onValueChange={(value) => setCategoryFilter(value as FilterValue<Category>)}
-                  options={["TODOS", ...categories]}
-                  labels={{ TODOS: "Todas", ...categoryLabels }}
-                />
-                <SelectField
-                  value={tierFilter}
-                  onValueChange={(value) => setTierFilter(value as FilterValue<AppTier>)}
-                  options={["TODOS", ...tiers]}
-                  labels={{ TODOS: "Todos", T5: "T5", T6: "T6", T7: "T7", T8: "T8" }}
-                />
-              </div>
-            </div>
-            <StockTable items={filteredStock} />
+            <StockTab />
           </Tabs.Content>
 
           <Tabs.Content value="tickets" className="panel">
-            <div className="panel-head">
-              <div>
-                <h2>Tickets abiertos</h2>
-                <span>Cierre con validacion de stock</span>
-              </div>
-            </div>
-            <div className="ticket-grid">
-              {openTickets.length === 0 ? <EmptyState text="No hay tickets abiertos." /> : null}
-              {openTickets.map((ticket) => (
-                <article className="ticket-card" key={ticket.id}>
-                  <div>
-                    <strong>{ticket.tier}</strong>
-                    <span>{formatDate(ticket.openedAt)}</span>
-                  </div>
-                  <TicketCosts ticket={ticket} compact />
-                  <Recipe tier={ticket.tier} />
-                  <CloseTicketDialog
-                    ticket={ticket}
-                    onSaved={refresh}
-                    onMissing={(items) => setMissing(items)}
-                    onError={(message) => setError(message)}
-                  />
-                </article>
-              ))}
-            </div>
+            <TicketTab />
           </Tabs.Content>
 
           <Tabs.Content value="history" className="panel">
-            <div className="panel-head">
-              <div>
-                <h2>Historial</h2>
-                <span>{closedTickets.length} tickets cerrados</span>
-              </div>
-            </div>
-            <HistoryTable tickets={closedTickets} />
+            <HistoryTab />
           </Tabs.Content>
         </Tabs.Root>
       </main>
@@ -213,17 +122,17 @@ function App() {
   );
 }
 
-function ClearStockDialog({ onSaved }: { onSaved: () => Promise<void> }) {
+function ClearStockDialog() {
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const clearStock = useStockStore((state) => state.clearStock);
 
   const clear = async () => {
     setSaving(true);
     setError(null);
     try {
-      await window.blight.clearStock();
-      await onSaved();
+      await clearStock();
       setOpen(false);
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "No se pudo vaciar el stock.");
@@ -268,183 +177,13 @@ function ClearStockDialog({ onSaved }: { onSaved: () => Promise<void> }) {
   );
 }
 
-function CloseTicketDialog({
-  ticket,
-  onSaved,
-  onMissing,
-  onError
-}: {
-  ticket: FabricationTicketView;
-  onSaved: () => Promise<void>;
-  onMissing: (items: string[]) => void;
-  onError: (message: string | null) => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const [filledDiariesQuantity, setFilledDiariesQuantity] = useState("0");
-  const [filledDiariesDiscount, setFilledDiariesDiscount] = useState("0");
-  const [leftoverTablesQuantity, setLeftoverTablesQuantity] = useState("0");
-  const [leftoverClothsQuantity, setLeftoverClothsQuantity] = useState("0");
-  const [pendingCredits, setPendingCredits] = useState<LeftoverCreditView[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [loadingCredits, setLoadingCredits] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-
-    setLoadingCredits(true);
-    window.blight
-      .listPendingLeftoverCredits(ticket.tier)
-      .then(setPendingCredits)
-      .catch((currentError) =>
-        setError(currentError instanceof Error ? currentError.message : "No se pudieron cargar las sobras.")
-      )
-      .finally(() => setLoadingCredits(false));
-  }, [open, ticket.tier]);
-
-  const submit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSaving(true);
-    setError(null);
-    onError(null);
-    onMissing([]);
-
-    try {
-      const result = await window.blight.closeTicket({
-        ticketId: ticket.id,
-        filledDiariesQuantity: Number(filledDiariesQuantity),
-        filledDiariesDiscount: Number(filledDiariesDiscount),
-        leftoverTablesQuantity: Number(leftoverTablesQuantity),
-        leftoverClothsQuantity: Number(leftoverClothsQuantity)
-      });
-
-      if (!result.ok) {
-        onMissing(
-          (result.missing ?? []).map(
-            (item) => `${categoryLabels[item.category]} ${item.tier} (${item.available}/${item.required})`
-          )
-        );
-        return;
-      }
-
-      await onSaved();
-      setOpen(false);
-      setFilledDiariesQuantity("0");
-      setFilledDiariesDiscount("0");
-      setLeftoverTablesQuantity("0");
-      setLeftoverClothsQuantity("0");
-    } catch (currentError) {
-      const message = currentError instanceof Error ? currentError.message : "No se pudo cerrar el ticket.";
-      setError(message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const pendingTotal = pendingCredits.reduce((total, credit) => total + credit.value, 0);
-
-  return (
-    <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger asChild>
-        <button className="button primary">
-          <Check />
-          Cerrar
-        </button>
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="overlay" />
-        <Dialog.Content className="modal">
-          <Dialog.Title>Cerrar ticket {ticket.tier}</Dialog.Title>
-          <form onSubmit={submit} className="form">
-            <div className="pending-box">
-              <strong>Sobras pendientes</strong>
-              {loadingCredits ? <span>Cargando...</span> : null}
-              {!loadingCredits && pendingCredits.length === 0 ? <span>Sin sobras para aplicar.</span> : null}
-              {!loadingCredits && pendingCredits.length > 0 ? (
-                <>
-                  <div className="consumption-list">
-                    {pendingCredits.map((credit) => (
-                      <span key={credit.id}>
-                        {categoryLabels[credit.category]} {credit.quantity} · {formatCurrency(credit.value)}
-                      </span>
-                    ))}
-                  </div>
-                  <span>Total aplicado {formatCurrency(pendingTotal)}</span>
-                </>
-              ) : null}
-            </div>
-            <label className="field">
-              Cantidad de diarios llenos
-              <input
-                value={filledDiariesQuantity}
-                onChange={(event) => setFilledDiariesQuantity(event.target.value)}
-                type="number"
-                min="0"
-              />
-            </label>
-            <label className="field">
-              Descuento por diarios llenos
-              <input
-                value={filledDiariesDiscount}
-                onChange={(event) => setFilledDiariesDiscount(event.target.value)}
-                type="number"
-                min="0"
-              />
-            </label>
-            <label className="field">
-              Cantidad de Tablas Sobrantes
-              <input
-                value={leftoverTablesQuantity}
-                onChange={(event) => setLeftoverTablesQuantity(event.target.value)}
-                type="number"
-                min="0"
-                max="73"
-              />
-            </label>
-            <label className="field">
-              Cantidad de Telas Sobrantes
-              <input
-                value={leftoverClothsQuantity}
-                onChange={(event) => setLeftoverClothsQuantity(event.target.value)}
-                type="number"
-                min="0"
-                max="44"
-              />
-            </label>
-            {error ? <p className="form-error">{error}</p> : null}
-            <div className="modal-actions">
-              <Dialog.Close asChild>
-                <button className="button ghost" type="button">
-                  Cancelar
-                </button>
-              </Dialog.Close>
-              <button className="button primary" type="submit" disabled={saving}>
-                {saving ? <Loader2 className="spin" /> : <Check />}
-                Cerrar
-              </button>
-            </div>
-          </form>
-          <Dialog.Close asChild>
-            <button className="icon-close" aria-label="Cerrar">
-              <X />
-            </button>
-          </Dialog.Close>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
-  );
-}
-
-type BulkPurchaseDraft = Record<Category, { quantity: string; total: string }>;
-
-function BulkPurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
+function BulkPurchaseDialog() {
   const [open, setOpen] = useState(false);
   const [tier, setTier] = useState<AppTier>("T5");
-  const [draft, setDraft] = useState<BulkPurchaseDraft>(() => createEmptyBulkDraft());
+  const [draft, setDraft] = useState(() => createEmptyBulkDraft());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const createBulkPurchase = useStockStore((state) => state.createBulkPurchase);
 
   const updateDraft = (category: Category, field: "quantity" | "total", value: string) => {
     setDraft((current) => ({
@@ -491,8 +230,7 @@ function BulkPurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
         throw new Error("No hay compras para registrar.");
       }
 
-      await window.blight.createBulkPurchase({ tier, purchases });
-      await onSaved();
+      await createBulkPurchase({ tier, purchases });
       setDraft(createEmptyBulkDraft());
       setOpen(false);
     } catch (currentError) {
@@ -520,7 +258,7 @@ function BulkPurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
               value={tier}
               onValueChange={(value) => setTier(value as AppTier)}
               options={tiers}
-              labels={{ T5: "T5", T6: "T6", T7: "T7", T8: "T8" }}
+              labels={tierLabels}
             />
             <div className="bulk-table">
               <div className="bulk-row bulk-head">
@@ -530,8 +268,8 @@ function BulkPurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
               </div>
               {categories.map((category) => (
                 <div className="bulk-row" key={category}>
-                  <span>
-                    {categoryLabels[category]} <b>{tier}</b>
+                  <span className="bulk-item-label">
+                    {categoryLabels[category]} <TierBadge tier={tier} />
                   </span>
                   <input
                     value={draft[category].quantity}
@@ -574,7 +312,7 @@ function BulkPurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
   );
 }
 
-function PurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
+function PurchaseDialog() {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<Category>("TABLAS");
   const [tier, setTier] = useState<AppTier>("T5");
@@ -582,19 +320,19 @@ function PurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
   const [total, setTotal] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const createPurchase = useStockStore((state) => state.createPurchase);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setSaving(true);
     setError(null);
     try {
-      await window.blight.createPurchase({
+      await createPurchase({
         category,
         tier,
         quantity: Number(quantity),
         total: Number(total)
       });
-      await onSaved();
       setOpen(false);
       setQuantity("1");
       setTotal("");
@@ -630,7 +368,7 @@ function PurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
               value={tier}
               onValueChange={(value) => setTier(value as AppTier)}
               options={tiers}
-              labels={{ T5: "T5", T6: "T6", T7: "T7", T8: "T8" }}
+              labels={tierLabels}
             />
             <label className="field">
               Cantidad
@@ -664,12 +402,14 @@ function PurchaseDialog({ onSaved }: { onSaved: () => Promise<void> }) {
   );
 }
 
-function TicketDialog({ stock, onSaved }: { stock: StockItemView[]; onSaved: () => Promise<void> }) {
+function TicketDialog() {
   const [open, setOpen] = useState(false);
   const [tier, setTier] = useState<AppTier>("T5");
   const [tax, setTax] = useState("1");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const stock = useStockStore((state) => state.stock);
+  const createTicket = useTicketStore((state) => state.createTicket);
   const preview = useMemo(() => calculateTicketPreview(stock, tier, Number(tax)), [stock, tax, tier]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -677,8 +417,7 @@ function TicketDialog({ stock, onSaved }: { stock: StockItemView[]; onSaved: () 
     setSaving(true);
     setError(null);
     try {
-      await window.blight.createTicket({ tier, tax: Number(tax) });
-      await onSaved();
+      await createTicket({ tier, tax: Number(tax) });
       setTax("1");
       setOpen(false);
     } catch (currentError) {
@@ -706,7 +445,7 @@ function TicketDialog({ stock, onSaved }: { stock: StockItemView[]; onSaved: () 
               value={tier}
               onValueChange={(value) => setTier(value as AppTier)}
               options={tiers}
-              labels={{ T5: "T5", T6: "T6", T7: "T7", T8: "T8" }}
+              labels={tierLabels}
             />
             <label className="field">
               Tax
@@ -714,7 +453,7 @@ function TicketDialog({ stock, onSaved }: { stock: StockItemView[]; onSaved: () 
             </label>
             <label className="field">
               Cantidad Bastones Total
-              <input value="6" readOnly />
+              <input value={String(staffQuantity)} readOnly />
             </label>
             <Recipe tier={tier} />
             <TicketPreview preview={preview} />
@@ -773,190 +512,6 @@ function TicketPreview({
       </div>
     </section>
   );
-}
-
-function SelectField<T extends string>({
-  label,
-  value,
-  onValueChange,
-  options,
-  labels
-}: {
-  label?: string;
-  value: T;
-  onValueChange: (value: string) => void;
-  options: T[];
-  labels: Record<string, string>;
-}) {
-  return (
-    <label className="field compact">
-      {label ? <span>{label}</span> : null}
-      <Select.Root value={value} onValueChange={onValueChange}>
-        <Select.Trigger className="select">
-          <Select.Value />
-          <Select.Icon>
-            <ChevronDown size={16} />
-          </Select.Icon>
-        </Select.Trigger>
-        <Select.Portal>
-          <Select.Content className="select-content">
-            <Select.Viewport>
-              {options.map((option) => (
-                <Select.Item className="select-item" key={option} value={option}>
-                  <Select.ItemText>{labels[option]}</Select.ItemText>
-                </Select.Item>
-              ))}
-            </Select.Viewport>
-          </Select.Content>
-        </Select.Portal>
-      </Select.Root>
-    </label>
-  );
-}
-
-function StockTable({ items }: { items: StockItemView[] }) {
-  return (
-    <div className="table">
-      <div className="row head">
-        <span>Categoria</span>
-        <span>Tier</span>
-        <span>Cantidad</span>
-        <span>Total</span>
-        <span>Precio medio</span>
-      </div>
-      {items.map((item) => (
-        <div className="row" key={item.id}>
-          <span>{categoryLabels[item.category]}</span>
-          <span className="badge">{item.tier}</span>
-          <span>{formatNumber(item.quantity)}</span>
-          <span>{formatCurrency(item.total)}</span>
-          <span>{formatCurrency(item.averageCost)}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function HistoryTable({ tickets }: { tickets: FabricationTicketView[] }) {
-  if (tickets.length === 0) {
-    return <EmptyState text="No hay fabricaciones cerradas." />;
-  }
-
-  return (
-    <div className="history-list">
-      {tickets.map((ticket) => (
-        <article className="history-item" key={ticket.id}>
-          <div className="history-title">
-            <strong>{ticket.tier}</strong>
-            <span>{ticket.closedAt ? formatDate(ticket.closedAt) : ""}</span>
-          </div>
-          <TicketCosts ticket={ticket} />
-          <div className="consumption-list">
-            {ticket.consumptions.map((item) => (
-              <span key={item.id}>
-                {categoryLabels[item.category]} {item.quantity} · {formatCurrency(item.discountedTotal)}
-              </span>
-            ))}
-          </div>
-        </article>
-      ))}
-    </div>
-  );
-}
-
-function TicketCosts({ ticket, compact = false }: { ticket: FabricationTicketView; compact?: boolean }) {
-  return (
-    <div className={compact ? "cost-grid compact" : "cost-grid"}>
-      <span>Tax {formatCurrency(ticket.tax)}</span>
-      <span>Crafting Tax {formatCurrency(ticket.craftingTax)}</span>
-      <span>Bastones {ticket.staffQuantity}</span>
-      {!compact ? <span>Materiales {formatCurrency(ticket.materialTotal)}</span> : null}
-      {!compact ? <span>Diarios llenos {ticket.filledDiariesQuantity}</span> : null}
-      {!compact ? <span>Descuento diarios {formatCurrency(ticket.filledDiariesDiscount)}</span> : null}
-      {!compact ? <span>Sobras tablas {ticket.leftoverTablesQuantity} · {formatCurrency(ticket.leftoverTablesValue)}</span> : null}
-      {!compact ? <span>Sobras telas {ticket.leftoverClothsQuantity} · {formatCurrency(ticket.leftoverClothsValue)}</span> : null}
-      {!compact ? <span>Descuento sobras {formatCurrency(ticket.appliedLeftoverDiscount)}</span> : null}
-      {!compact ? <span>Inversion Total {formatCurrency(ticket.investmentTotal)}</span> : null}
-      {!compact ? <span>Precio de cada baston {formatCurrency(ticket.unitCost)}</span> : null}
-    </div>
-  );
-}
-
-function Recipe({ tier }: { tier: AppTier }) {
-  return (
-    <div className="recipe">
-      <span>73 Tablas</span>
-      <span>44 Telas</span>
-      <span>6 Artefactos</span>
-      <span>{recipeDiary[tier]} Diarios</span>
-    </div>
-  );
-}
-
-function Metric({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
-  return (
-    <article className="metric">
-      {icon}
-      <span>{label}</span>
-      <strong>{value}</strong>
-    </article>
-  );
-}
-
-function EmptyState({ text }: { text: string }) {
-  return <div className="empty">{text}</div>;
-}
-
-function createEmptyBulkDraft() {
-  return Object.fromEntries(
-    categories.map((category) => [category, { quantity: "", total: "" }])
-  ) as BulkPurchaseDraft;
-}
-
-function calculateTicketPreview(stock: StockItemView[], tier: AppTier, rawTax: number) {
-  const taxValue = Number.isFinite(rawTax) && rawTax > 0 ? rawTax : 0;
-  const materials = [
-    ...recipeBase,
-    { category: "DIARIOS_VACIOS" as Category, quantity: recipeDiary[tier] }
-  ].map((material) => {
-    const stockItem = stock.find((item) => item.category === material.category && item.tier === tier);
-    const averageCost = stockItem?.averageCost ?? 0;
-    return {
-      ...material,
-      averageCost,
-      subtotal: material.quantity * averageCost
-    };
-  });
-  const materialTotal = materials.reduce((total, material) => total + material.subtotal, 0);
-  const craftingTaxUnit = taxValue * craftingTaxBase * craftingTaxMultipliers[tier];
-  const craftingTaxTotal = craftingTaxUnit * staffQuantity;
-  const investmentTotal = materialTotal + craftingTaxTotal;
-
-  return {
-    materials,
-    materialTotal,
-    craftingTaxUnit,
-    craftingTaxTotal,
-    investmentTotal,
-    unitCost: investmentTotal / staffQuantity
-  };
-}
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat("es-ES", {
-    maximumFractionDigits: 0
-  }).format(value);
-}
-
-function formatNumber(value: number) {
-  return new Intl.NumberFormat("es-ES").format(value);
-}
-
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("es-ES", {
-    dateStyle: "medium",
-    timeStyle: "short"
-  }).format(new Date(value));
 }
 
 export default App;
