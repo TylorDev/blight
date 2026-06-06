@@ -1,8 +1,13 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import * as Tabs from "@radix-ui/react-tabs";
 import { CircleDollarSign, Loader2, Package, SlidersHorizontal, X } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
-import type { AppTier, StaffQualityView, StaffStockItemView, StaffStockMovementView } from "../../../electron/types";
+import { FormEvent, useEffect, useMemo, useState } from "react";
+import type {
+  AppTier,
+  StaffQualityView,
+  StaffStockItemView,
+  StaffStockLotView,
+  StaffStockMovementView
+} from "../../../electron/types";
 import {
   FilterValue,
   formatCurrency,
@@ -21,88 +26,123 @@ import "./StaffStockTab.scss";
 
 export function StaffStockTab() {
   const stock = useStaffStockStore((state) => state.stock);
+  const lots = useStaffStockStore((state) => state.lots);
   const movements = useStaffStockStore((state) => state.movements);
   const tierFilter = useStaffStockStore((state) => state.tierFilter);
   const qualityFilter = useStaffStockStore((state) => state.qualityFilter);
   const setTierFilter = useStaffStockStore((state) => state.setTierFilter);
   const setQualityFilter = useStaffStockStore((state) => state.setQualityFilter);
-  const filteredStock = useMemo(() => {
-    return stock.filter((item) => {
+  const loadStaffStock = useStaffStockStore((state) => state.loadStaffStock);
+  const loadStaffStockLots = useStaffStockStore((state) => state.loadStaffStockLots);
+  const loadStaffMovements = useStaffStockStore((state) => state.loadStaffMovements);
+  const staffInStock = stock.reduce((total, item) => total + item.quantity, 0);
+  const totalSales = movements
+    .filter((movement) => movement.type === "VENTA")
+    .reduce((total, movement) => total + movement.total, 0);
+  const filteredLots = useMemo(() => {
+    return lots.filter((item) => {
       const tierMatches = tierFilter === "TODOS" || item.tier === tierFilter;
       const qualityMatches = qualityFilter === "TODOS" || item.quality === qualityFilter;
       return tierMatches && qualityMatches;
     });
-  }, [qualityFilter, stock, tierFilter]);
+  }, [lots, qualityFilter, tierFilter]);
+
+  useEffect(() => {
+    void Promise.all([loadStaffStock(), loadStaffStockLots(), loadStaffMovements()]).catch(() => undefined);
+  }, [loadStaffMovements, loadStaffStock, loadStaffStockLots]);
 
   return (
-    <>
-      <div className="panel-head">
+    <section className="staff-layout">
+      <div className="staff-market-hero">
         <div>
-          <h2>Bastones</h2>
-          <span>{formatNumber(stock.reduce((total, item) => total + item.quantity, 0))} en stock</span>
+          <p className="staff-market-kicker">Market</p>
+          <h2>Bastones en el stock</h2>
+          <span>{formatNumber(staffInStock)} unidades listas</span>
         </div>
-        <div className="filters">
-          <SelectField
-            value={tierFilter}
-            onValueChange={(value) => setTierFilter(value as FilterValue<AppTier>)}
-            options={["TODOS", ...tiers]}
-            labels={{ TODOS: "Todos", ...tierLabels }}
-          />
-          <SelectField
-            value={qualityFilter}
-            onValueChange={(value) => setQualityFilter(value as FilterValue<StaffQualityView>)}
-            options={["TODOS", ...staffQualities]}
-            labels={{ TODOS: "Todas", ...staffQualityLabels }}
-          />
+        <div className="staff-market-actions">
+          <SellStaffDialog stock={stock} />
+          <AdjustStaffDialog />
         </div>
       </div>
 
-      <Tabs.Root defaultValue="stock" className="staff-workspace">
-        <Tabs.List className="staff-tab-list">
-          <Tabs.Trigger value="stock">Stock</Tabs.Trigger>
-          <Tabs.Trigger value="movements">Movimientos</Tabs.Trigger>
-          <Tabs.Trigger value="sales">Ventas</Tabs.Trigger>
-          <Tabs.Trigger value="adjustments">Ajustes</Tabs.Trigger>
-        </Tabs.List>
+      <div className="staff-market-metrics">
+        <StaffMetric label="Bastones en el stock" value={formatNumber(staffInStock)} />
+        <StaffMetric label="Ventas totales" value={formatCurrency(totalSales)} />
+        <StaffMetric label="Ganancias totales" value="-" />
+        <StaffMetric label="Bastones en proceso de venta" value="-" />
+        <StaffMetric label="Valor del stock" value="-" />
+        <StaffMetric label="Valor de bastones en proceso de venta" value="-" />
+      </div>
 
-        <Tabs.Content value="stock">
-          <StaffStockTable items={filteredStock} />
-        </Tabs.Content>
-        <Tabs.Content value="movements">
+      <div className="staff-market-grid">
+        <section className="staff-market-card staff-market-card--stock">
+          <div className="staff-market-card-head">
+            <div>
+              <h3>Stock</h3>
+              <span>{formatNumber(filteredLots.reduce((total, item) => total + item.quantity, 0))} filtrados</span>
+            </div>
+            <div className="filters">
+              <SelectField
+                value={tierFilter}
+                onValueChange={(value) => setTierFilter(value as FilterValue<AppTier>)}
+                options={["TODOS", ...tiers]}
+                labels={{ TODOS: "Todos", ...tierLabels }}
+              />
+              <SelectField
+                value={qualityFilter}
+                onValueChange={(value) => setQualityFilter(value as FilterValue<StaffQualityView>)}
+                options={["TODOS", ...staffQualities]}
+                labels={{ TODOS: "Todas", ...staffQualityLabels }}
+              />
+            </div>
+          </div>
+          <StaffStockTable items={filteredLots} />
+        </section>
+
+        <section className="staff-market-card staff-market-card--movements">
+          <div className="staff-market-card-head">
+            <div>
+              <h3>Movimientos</h3>
+              <span>{formatNumber(movements.length)} registros</span>
+            </div>
+          </div>
           <StaffMovementTable movements={movements} />
-        </Tabs.Content>
-        <Tabs.Content value="sales">
-          <div className="staff-action-panel">
-            <SellStaffDialog stock={stock} />
-          </div>
-        </Tabs.Content>
-        <Tabs.Content value="adjustments">
-          <div className="staff-action-panel">
-            <AdjustStaffDialog />
-          </div>
-        </Tabs.Content>
-      </Tabs.Root>
-    </>
+        </section>
+      </div>
+    </section>
   );
 }
 
-function StaffStockTable({ items }: { items: StaffStockItemView[] }) {
+function StaffMetric({ label, value }: { label: string; value: string }) {
+  return (
+    <article className="staff-market-metric">
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </article>
+  );
+}
+
+function StaffStockTable({ items }: { items: StaffStockLotView[] }) {
   if (items.length === 0) {
     return <EmptyState text="No hay stock de bastones." />;
   }
 
   return (
-    <div className="staff-table">
-      <div className="staff-row staff-row--head">
+    <div className="staff-market-table staff-market-table--stock">
+      <div className="staff-market-row staff-market-row--head">
         <span>Tier</span>
         <span>Calidad</span>
         <span>Cantidad</span>
+        <span>Coste</span>
+        <span>Ticket</span>
       </div>
       {items.map((item) => (
-        <div className="staff-row" key={item.id}>
+        <div className="staff-market-row" key={item.id}>
           <TierBadge tier={item.tier} />
           <span>{staffQualityLabels[item.quality]}</span>
           <strong>{formatNumber(item.quantity)}</strong>
+          <span>{formatCurrency(item.unitCost)}</span>
+          <span>{item.ticketCode}</span>
         </div>
       ))}
     </div>
@@ -115,8 +155,8 @@ function StaffMovementTable({ movements }: { movements: StaffStockMovementView[]
   }
 
   return (
-    <div className="staff-table staff-table--movements">
-      <div className="staff-row staff-row--head">
+    <div className="staff-market-table staff-market-table--movements">
+      <div className="staff-market-row staff-market-row--head">
         <span>Fecha</span>
         <span>Tipo</span>
         <span>Tier</span>
@@ -126,7 +166,7 @@ function StaffMovementTable({ movements }: { movements: StaffStockMovementView[]
         <span>Motivo</span>
       </div>
       {movements.map((movement) => (
-        <div className="staff-row" key={movement.id}>
+        <div className="staff-market-row" key={movement.id}>
           <span>{formatDate(movement.createdAt)}</span>
           <span>{staffMovementTypeLabels[movement.type]}</span>
           <TierBadge tier={movement.tier} />

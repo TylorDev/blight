@@ -24,6 +24,7 @@ const api: AppApi = {
   listPendingLeftoverCredits: (tier: AppTier) => ipcRenderer.invoke("leftover:listPending", tier),
   closeTicket: (input: CloseTicketInput) => ipcRenderer.invoke("ticket:close", input),
   listStaffStock: () => ipcRenderer.invoke("staffStock:list"),
+  listStaffStockLots: () => ipcRenderer.invoke("staffStock:listLots"),
   listStaffMovements: () => ipcRenderer.invoke("staffStock:listMovements"),
   adjustStaffStock: (input: AdjustStaffStockInput) => ipcRenderer.invoke("staffStock:adjust", input),
   sellStaffStock: (input: SellStaffStockInput) => ipcRenderer.invoke("staffStock:sell", input)

@@ -1,4 +1,4 @@
-import { PrismaClient, StaffMovementType, StaffQuality, StockCategory, TicketStatus, Tier } from "@prisma/client";
+import { Prisma, PrismaClient, StaffMovementType, StaffQuality, StockCategory, TicketStatus, Tier } from "@prisma/client";
 import type {
   AdjustStaffStockInput,
   CloseTicketInput,
@@ -10,6 +10,7 @@ import type {
   LeftoverCreditView,
   SellStaffStockInput,
   StaffStockItemView,
+  StaffStockLotView,
   StaffStockMovementView,
   StockItemView
 } from "./types";
@@ -202,6 +203,21 @@ export function createInventoryService(prisma: PrismaClient) {
   `);
 
     await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "StaffStockLot" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "ticketId" TEXT,
+      "tier" TEXT NOT NULL,
+      "quality" TEXT NOT NULL,
+      "quantity" INTEGER NOT NULL,
+      "unitCost" REAL NOT NULL DEFAULT 0,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "StaffStockLot_ticketId_fkey"
+        FOREIGN KEY ("ticketId") REFERENCES "FabricationTicket" ("id")
+        ON DELETE SET NULL ON UPDATE CASCADE
+    );
+  `);
+
+    await prisma.$executeRawUnsafe(`
     CREATE TABLE IF NOT EXISTS "TicketProducedStaff" (
       "id" TEXT NOT NULL PRIMARY KEY,
       "ticketId" TEXT,
@@ -285,6 +301,14 @@ export function createInventoryService(prisma: PrismaClient) {
     return items.map(toStaffStockView);
   }
 
+  async function listStaffStockLots(): Promise<StaffStockLotView[]> {
+    const lots = await prisma.staffStockLot.findMany({
+      where: { quantity: { gt: 0 } },
+      orderBy: { createdAt: "asc" }
+    });
+    return lots.map(toStaffStockLotView);
+  }
+
   async function listStaffMovements(): Promise<StaffStockMovementView[]> {
     const movements = await prisma.staffStockMovement.findMany({
       orderBy: { createdAt: "desc" }
@@ -322,6 +346,20 @@ export function createInventoryService(prisma: PrismaClient) {
         }
       });
 
+      if (quantityChange > 0) {
+        await tx.staffStockLot.create({
+          data: {
+            ticketId: null,
+            tier: input.tier,
+            quality: input.quality,
+            quantity: quantityChange,
+            unitCost: 0
+          }
+        });
+      } else {
+        await consumeStaffStockLots(tx, input.tier, input.quality, Math.abs(quantityChange));
+      }
+
       return updated;
     });
 
@@ -356,6 +394,8 @@ export function createInventoryService(prisma: PrismaClient) {
           reason: "Venta"
         }
       });
+
+      await consumeStaffStockLots(tx, input.tier, input.quality, soldQuantity);
 
       return updated;
     });
@@ -543,6 +583,10 @@ export function createInventoryService(prisma: PrismaClient) {
         data: { ticketId: null }
       });
       await tx.ticketProducedStaff.updateMany({
+        where: { ticketId: { in: ticketIds } },
+        data: { ticketId: null }
+      });
+      await tx.staffStockLot.updateMany({
         where: { ticketId: { in: ticketIds } },
         data: { ticketId: null }
       });
@@ -742,6 +786,16 @@ export function createInventoryService(prisma: PrismaClient) {
           }
         });
 
+        await tx.staffStockLot.create({
+          data: {
+            ticketId: ticket.id,
+            tier: ticket.tier,
+            quality: producedStaff.quality,
+            quantity: producedStaff.quantity,
+            unitCost
+          }
+        });
+
         await tx.staffStockMovement.create({
           data: {
             type: StaffMovementType.PRODUCCION,
@@ -790,6 +844,7 @@ export function createInventoryService(prisma: PrismaClient) {
     listStock,
     clearStock,
     listStaffStock,
+    listStaffStockLots,
     listStaffMovements,
     adjustStaffStock,
     sellStaffStock,
@@ -819,6 +874,7 @@ export const initializeDatabase = () => getDefaultService().initializeDatabase()
 export const listStock = () => getDefaultService().listStock();
 export const clearStock = () => getDefaultService().clearStock();
 export const listStaffStock = () => getDefaultService().listStaffStock();
+export const listStaffStockLots = () => getDefaultService().listStaffStockLots();
 export const listStaffMovements = () => getDefaultService().listStaffMovements();
 export const adjustStaffStock = (input: AdjustStaffStockInput) => getDefaultService().adjustStaffStock(input);
 export const sellStaffStock = (input: SellStaffStockInput) => getDefaultService().sellStaffStock(input);
@@ -863,6 +919,27 @@ function toStaffStockView(item: {
     tier: item.tier,
     quality: item.quality,
     quantity: item.quantity
+  };
+}
+
+function toStaffStockLotView(lot: {
+  id: string;
+  tier: Tier;
+  quality: StaffQuality;
+  quantity: number;
+  unitCost: number;
+  ticketId: string | null;
+  createdAt: Date;
+}): StaffStockLotView {
+  return {
+    id: lot.id,
+    tier: lot.tier,
+    quality: lot.quality,
+    quantity: lot.quantity,
+    unitCost: lot.unitCost,
+    ticketId: lot.ticketId,
+    ticketCode: lot.ticketId ? lot.ticketId.slice(0, 6).toUpperCase() : "-",
+    createdAt: lot.createdAt.toISOString()
   };
 }
 
@@ -1112,6 +1189,40 @@ function getEffectiveRecipe(
       quantity: Math.max(0, material.quantity - leftoverQuantities[material.category])
     };
   });
+}
+
+async function consumeStaffStockLots(
+  tx: Prisma.TransactionClient,
+  tier: Tier,
+  quality: StaffQuality,
+  quantity: number
+) {
+  let remaining = quantity;
+  const lots = await tx.staffStockLot.findMany({
+    where: {
+      tier,
+      quality,
+      quantity: { gt: 0 }
+    },
+    orderBy: { createdAt: "asc" }
+  });
+
+  for (const lot of lots) {
+    if (remaining <= 0) {
+      break;
+    }
+
+    const consumed = Math.min(lot.quantity, remaining);
+    await tx.staffStockLot.update({
+      where: { id: lot.id },
+      data: { quantity: lot.quantity - consumed }
+    });
+    remaining -= consumed;
+  }
+
+  if (remaining > 0) {
+    throw new Error("No hay lotes de bastones suficientes para descontar.");
+  }
 }
 
 async function addColumnIfMissing(prisma: PrismaClient, tableName: string, columnName: string, definition: string) {

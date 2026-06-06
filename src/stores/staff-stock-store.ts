@@ -5,12 +5,14 @@ import type {
   SellStaffStockInput,
   StaffQualityView,
   StaffStockItemView,
+  StaffStockLotView,
   StaffStockMovementView
 } from "../../electron/types";
 import type { FilterValue } from "../app-data";
 
 interface StaffStockStore {
   stock: StaffStockItemView[];
+  lots: StaffStockLotView[];
   movements: StaffStockMovementView[];
   loading: boolean;
   error: string | null;
@@ -20,6 +22,7 @@ interface StaffStockStore {
   setQualityFilter: (value: FilterValue<StaffQualityView>) => void;
   clearError: () => void;
   loadStaffStock: () => Promise<void>;
+  loadStaffStockLots: () => Promise<void>;
   loadStaffMovements: () => Promise<void>;
   adjustStaffStock: (input: AdjustStaffStockInput) => Promise<void>;
   sellStaffStock: (input: SellStaffStockInput) => Promise<void>;
@@ -27,6 +30,7 @@ interface StaffStockStore {
 
 export const useStaffStockStore = create<StaffStockStore>((set, get) => ({
   stock: [],
+  lots: [],
   movements: [],
   loading: false,
   error: null,
@@ -42,6 +46,19 @@ export const useStaffStockStore = create<StaffStockStore>((set, get) => ({
       set({ stock });
     } catch (currentError) {
       const error = currentError instanceof Error ? currentError.message : "No se pudo cargar el stock de bastones.";
+      set({ error });
+      throw currentError;
+    } finally {
+      set({ loading: false });
+    }
+  },
+  loadStaffStockLots: async () => {
+    set({ loading: true, error: null });
+    try {
+      const lots = await window.blight.listStaffStockLots();
+      set({ lots });
+    } catch (currentError) {
+      const error = currentError instanceof Error ? currentError.message : "No se pudieron cargar los lotes de bastones.";
       set({ error });
       throw currentError;
     } finally {
@@ -65,7 +82,7 @@ export const useStaffStockStore = create<StaffStockStore>((set, get) => ({
     set({ error: null });
     try {
       await window.blight.adjustStaffStock(input);
-      await Promise.all([get().loadStaffStock(), get().loadStaffMovements()]);
+      await Promise.all([get().loadStaffStock(), get().loadStaffStockLots(), get().loadStaffMovements()]);
     } catch (currentError) {
       const error = currentError instanceof Error ? currentError.message : "No se pudo ajustar el stock.";
       set({ error });
@@ -76,7 +93,7 @@ export const useStaffStockStore = create<StaffStockStore>((set, get) => ({
     set({ error: null });
     try {
       await window.blight.sellStaffStock(input);
-      await Promise.all([get().loadStaffStock(), get().loadStaffMovements()]);
+      await Promise.all([get().loadStaffStock(), get().loadStaffStockLots(), get().loadStaffMovements()]);
     } catch (currentError) {
       const error = currentError instanceof Error ? currentError.message : "No se pudo registrar la venta.";
       set({ error });

@@ -95,6 +95,7 @@ model FabricationTicket {
   appliedLeftoverCredits TicketLeftoverCredit[] @relation("AppliedTicketLeftovers")
   producedStaffs  TicketProducedStaff[]
   staffMovements  StaffStockMovement[]
+  staffStockLots  StaffStockLot[]
 }
 
 model TicketConsumption {
@@ -145,6 +146,17 @@ model StaffStockMovement {
   ticketId  String?
   ticket    FabricationTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
   createdAt DateTime          @default(now())
+}
+
+model StaffStockLot {
+  id        String       @id @default(cuid())
+  ticketId  String?
+  ticket    FabricationTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  tier      Tier
+  quality   StaffQuality
+  quantity  Int
+  unitCost  Float        @default(0)
+  createdAt DateTime     @default(now())
 }
 
 model TicketProducedStaff {

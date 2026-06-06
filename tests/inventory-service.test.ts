@@ -45,6 +45,7 @@ describe("initializeDatabase", () => {
         "TicketLeftoverCredit",
         "StaffStockItem",
         "StaffStockMovement",
+        "StaffStockLot",
         "TicketProducedStaff"
       ])
     );
@@ -76,6 +77,23 @@ describe("createPurchase", () => {
     expect(second.total).toBe(2000);
     expect(second.averageCost).toBeCloseTo(133.3333, 4);
     expect(movements).toHaveLength(2);
+  });
+
+  it("truncates decimal quantities while preserving purchase total", async () => {
+    const item = await service.createPurchase({
+      category: StockCategory.TABLAS,
+      tier: Tier.T5,
+      quantity: 10.9,
+      total: 1090
+    });
+    const movement = await prisma.stockMovement.findFirstOrThrow({
+      where: { type: "COMPRA", category: StockCategory.TABLAS, tier: Tier.T5 }
+    });
+
+    expect(item.quantity).toBe(10);
+    expect(item.total).toBe(1090);
+    expect(item.averageCost).toBe(109);
+    expect(movement).toMatchObject({ quantity: 10, total: 1090 });
   });
 
   it("rejects purchases with invalid quantity or total", async () => {
@@ -125,6 +143,29 @@ describe("createBulkPurchase", () => {
     });
     expect(movements.every((movement) => movement.tier === Tier.T5)).toBe(true);
     expect(movements).toHaveLength(3);
+  });
+
+  it("combines repeated categories in one bulk purchase without duplicating stock rows", async () => {
+    const updated = await service.createBulkPurchase({
+      tier: Tier.T5,
+      purchases: [
+        { category: StockCategory.TABLAS, quantity: 10, total: 1000 },
+        { category: StockCategory.TABLAS, quantity: 5, total: 1000 }
+      ]
+    });
+    const stock = await service.listStock();
+    const movements = await prisma.stockMovement.findMany({
+      where: { type: "COMPRA", category: StockCategory.TABLAS, tier: Tier.T5 }
+    });
+
+    expect(updated).toHaveLength(2);
+    expect(stock.filter((item) => item.category === StockCategory.TABLAS && item.tier === Tier.T5)).toHaveLength(1);
+    expect(stockItem(stock, StockCategory.TABLAS, Tier.T5)).toMatchObject({
+      quantity: 15,
+      total: 2000,
+      averageCost: expect.closeTo(133.3333, 4)
+    });
+    expect(movements).toHaveLength(2);
   });
 
   it("rejects an empty bulk purchase", async () => {
@@ -244,6 +285,19 @@ describe("tickets", () => {
     expect(stockAfterDelete).toEqual(stockBeforeDelete);
   });
 
+  it("rejects deleting a missing open ticket without mutating data", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+    await service.createTicket({ tier: Tier.T5, tax: 100 });
+    const stockBeforeDelete = await service.listStock();
+    const openTicketsBeforeDelete = await service.listOpenTickets();
+
+    await expect(service.deleteOpenTicket("missing")).rejects.toThrow("Ticket no encontrado");
+
+    expect(await service.listStock()).toEqual(stockBeforeDelete);
+    expect(await service.listOpenTickets()).toEqual(openTicketsBeforeDelete);
+    expect(await service.listHistory()).toEqual([]);
+  });
+
   it("rejects deleting a closed ticket", async () => {
     await seedRecipeStock(Tier.T5, 100, 1000);
     const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
@@ -333,6 +387,16 @@ describe("tickets", () => {
     expect(await prisma.staffStockMovement.count({
       where: { type: StaffMovementType.PRODUCCION, ticketId: ticket.id }
     })).toBe(1);
+    expect(await service.listStaffStockLots()).toEqual([
+      expect.objectContaining({
+        tier: Tier.T5,
+        quality: StaffQuality.NORMAL,
+        quantity: 6,
+        unitCost: expect.closeTo(24674.6667, 4),
+        ticketId: ticket.id,
+        ticketCode: ticket.id.slice(0, 6).toUpperCase()
+      })
+    ]);
   });
 
   it("rejects closing when produced staff quantities do not match staff quantity", async () => {
@@ -348,6 +412,169 @@ describe("tickets", () => {
     ).rejects.toThrow("bastones");
 
     expect(await prisma.ticketProducedStaff.count()).toBe(0);
+  });
+
+  it("rejects discounts that would leave negative investment without mutating close state", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+    const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    const stockBeforeClose = await service.listStock();
+
+    await expect(
+      service.closeTicket(closeInput(ticket.id, { filledDiariesDiscount: 999999 }))
+    ).rejects.toThrow("inversion total");
+
+    const ticketAfterCloseAttempt = await prisma.fabricationTicket.findUniqueOrThrow({ where: { id: ticket.id } });
+
+    expect(ticketAfterCloseAttempt.status).toBe("ABIERTO");
+    expect(await service.listStock()).toEqual(stockBeforeClose);
+    expect(await prisma.ticketConsumption.count()).toBe(0);
+    expect(await prisma.stockMovement.count({ where: { type: "CONSUMO" } })).toBe(0);
+    expect(await prisma.ticketProducedStaff.count()).toBe(0);
+    expect(await prisma.staffStockMovement.count()).toBe(0);
+  });
+
+  it("normalizes multiple produced staff qualities when closing a ticket", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+    const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+
+    const result = await service.closeTicket(
+      closeInput(ticket.id, {
+        producedStaffs: [
+          { quality: StaffQuality.NORMAL, quantity: 2 },
+          { quality: StaffQuality.BUENA, quantity: 3 },
+          { quality: StaffQuality.NOTABLE, quantity: 1 }
+        ]
+      })
+    );
+    const producedStaffs = await prisma.ticketProducedStaff.findMany({
+      where: { ticketId: ticket.id },
+      orderBy: { quality: "asc" }
+    });
+    const productionMovements = await prisma.staffStockMovement.findMany({
+      where: { ticketId: ticket.id, type: StaffMovementType.PRODUCCION },
+      orderBy: { quality: "asc" }
+    });
+    const stock = await service.listStaffStock();
+
+    expect(result.ok).toBe(true);
+    expect(producedStaffs).toHaveLength(3);
+    expect(productionMovements).toHaveLength(3);
+    expect(stock.find((item) => item.tier === Tier.T5 && item.quality === StaffQuality.NORMAL)?.quantity).toBe(2);
+    expect(stock.find((item) => item.tier === Tier.T5 && item.quality === StaffQuality.BUENA)?.quantity).toBe(3);
+    expect(stock.find((item) => item.tier === Tier.T5 && item.quality === StaffQuality.NOTABLE)?.quantity).toBe(1);
+    expect(producedStaffs.reduce((total, staff) => total + staff.quantity, 0)).toBe(6);
+  });
+
+  it("aggregates duplicate produced staff qualities before persisting", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+    const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+
+    const result = await service.closeTicket(
+      closeInput(ticket.id, {
+        producedStaffs: [
+          { quality: StaffQuality.NORMAL, quantity: 2 },
+          { quality: StaffQuality.NORMAL, quantity: 4 }
+        ]
+      })
+    );
+    const producedStaffs = await prisma.ticketProducedStaff.findMany({ where: { ticketId: ticket.id } });
+    const normalStock = await prisma.staffStockItem.findUniqueOrThrow({
+      where: { tier_quality: { tier: Tier.T5, quality: StaffQuality.NORMAL } }
+    });
+
+    expect(result.ok).toBe(true);
+    expect(producedStaffs).toHaveLength(1);
+    expect(producedStaffs[0]).toMatchObject({ quality: StaffQuality.NORMAL, quantity: 6 });
+    expect(normalStock.quantity).toBe(6);
+  });
+
+  it("keeps produced staff lots separated by source ticket", async () => {
+    await seedRecipeStock(Tier.T5, 220, 1000);
+    const firstTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    await service.closeTicket(
+      closeInput(firstTicket.id, {
+        producedStaffs: [{ quality: StaffQuality.BUENA, quantity: 6 }]
+      })
+    );
+    const secondTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    await service.closeTicket(
+      closeInput(secondTicket.id, {
+        producedStaffs: [{ quality: StaffQuality.BUENA, quantity: 6 }]
+      })
+    );
+
+    const lots = await service.listStaffStockLots();
+
+    expect(lots).toHaveLength(2);
+    expect(lots.map((lot) => lot.ticketId)).toEqual([firstTicket.id, secondTicket.id]);
+    expect(lots.every((lot) => lot.tier === Tier.T5 && lot.quality === StaffQuality.BUENA && lot.quantity === 6)).toBe(true);
+  });
+
+  it("rejects invalid produced staff quality without mutating close state", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+    const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    const stockBeforeClose = await service.listStock();
+
+    await expect(
+      service.closeTicket(
+        closeInput(ticket.id, {
+          producedStaffs: [{ quality: "INVALIDA" as StaffQuality, quantity: 6 }]
+        })
+      )
+    ).rejects.toThrow("Calidad de baston invalida");
+
+    const ticketAfterCloseAttempt = await prisma.fabricationTicket.findUniqueOrThrow({ where: { id: ticket.id } });
+
+    expect(ticketAfterCloseAttempt.status).toBe("ABIERTO");
+    expect(await service.listStock()).toEqual(stockBeforeClose);
+    expect(await prisma.ticketConsumption.count()).toBe(0);
+    expect(await prisma.ticketProducedStaff.count()).toBe(0);
+    expect(await prisma.staffStockMovement.count()).toBe(0);
+  });
+
+  it("rejects non-finite produced staff quantities without mutating close state", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+    const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    const stockBeforeClose = await service.listStock();
+
+    await expect(
+      service.closeTicket(
+        closeInput(ticket.id, {
+          producedStaffs: [{ quality: StaffQuality.NORMAL, quantity: Number.NaN }]
+        })
+      )
+    ).rejects.toThrow("cantidades de bastones");
+
+    const ticketAfterCloseAttempt = await prisma.fabricationTicket.findUniqueOrThrow({ where: { id: ticket.id } });
+
+    expect(ticketAfterCloseAttempt.status).toBe("ABIERTO");
+    expect(await service.listStock()).toEqual(stockBeforeClose);
+    expect(await prisma.ticketConsumption.count()).toBe(0);
+    expect(await prisma.ticketProducedStaff.count()).toBe(0);
+    expect(await prisma.staffStockMovement.count()).toBe(0);
+  });
+
+  it("truncates decimal close quantities before persisting", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+    const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+
+    const result = await service.closeTicket(
+      closeInput(ticket.id, {
+        filledDiariesQuantity: 2.8,
+        leftoverTablesQuantity: 1.9,
+        leftoverClothsQuantity: 1.2,
+        producedStaffs: [{ quality: StaffQuality.NORMAL, quantity: 6.9 }]
+      })
+    );
+    const producedStaff = await prisma.ticketProducedStaff.findFirstOrThrow({ where: { ticketId: ticket.id } });
+
+    expect(result.ok).toBe(true);
+    expect(result.ticket).toMatchObject({
+      filledDiariesQuantity: 2,
+      leftoverTablesQuantity: 1,
+      leftoverClothsQuantity: 1
+    });
+    expect(producedStaff).toMatchObject({ quality: StaffQuality.NORMAL, quantity: 6 });
   });
 
   it("applies filled diary discount to the ticket total", async () => {
@@ -477,6 +704,55 @@ describe("tickets", () => {
     expect(await prisma.ticketLeftoverCredit.count({ where: { tier: Tier.T5, appliedToTicketId: null } })).toBe(2);
   });
 
+  it("lists pending leftover credits for the requested tier ordered by creation date", async () => {
+    const sourceTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    const appliedTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    await prisma.ticketLeftoverCredit.createMany({
+      data: [
+        {
+          tier: Tier.T5,
+          category: StockCategory.TABLAS,
+          quantity: 1,
+          value: 100,
+          sourceTicketId: sourceTicket.id,
+          createdAt: new Date("2026-01-03T00:00:00.000Z")
+        },
+        {
+          tier: Tier.T5,
+          category: StockCategory.TELAS,
+          quantity: 2,
+          value: 200,
+          sourceTicketId: sourceTicket.id,
+          createdAt: new Date("2026-01-01T00:00:00.000Z")
+        },
+        {
+          tier: Tier.T5,
+          category: StockCategory.TABLAS,
+          quantity: 3,
+          value: 300,
+          sourceTicketId: sourceTicket.id,
+          appliedToTicketId: appliedTicket.id,
+          appliedAt: new Date("2026-01-02T00:00:00.000Z"),
+          createdAt: new Date("2026-01-02T00:00:00.000Z")
+        },
+        {
+          tier: Tier.T6,
+          category: StockCategory.TABLAS,
+          quantity: 4,
+          value: 400,
+          sourceTicketId: sourceTicket.id,
+          createdAt: new Date("2026-01-04T00:00:00.000Z")
+        }
+      ]
+    });
+
+    const credits = await service.listPendingLeftoverCredits(Tier.T5);
+
+    expect(credits).toHaveLength(2);
+    expect(credits.map((credit) => credit.quantity)).toEqual([2, 1]);
+    expect(credits.every((credit) => credit.tier === Tier.T5 && credit.appliedToTicketId === null)).toBe(true);
+  });
+
   it("rejects invalid close form values", async () => {
     await seedRecipeStock(Tier.T5, 100, 1000);
     const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
@@ -560,6 +836,110 @@ describe("tickets", () => {
 
     expect(updated.quantity).toBe(4);
     expect(movement).toMatchObject({ quantity: 2, total: 5000, reason: "Venta" });
+    expect(await service.listStaffStockLots()).toEqual([
+      expect.objectContaining({ ticketId: ticket.id, quantity: 4 })
+    ]);
+  });
+
+  it("allows selling staff stock with zero total", async () => {
+    await service.adjustStaffStock({
+      tier: Tier.T5,
+      quality: StaffQuality.NORMAL,
+      quantity: 2,
+      reason: "Carga inicial"
+    });
+
+    const updated = await service.sellStaffStock({
+      tier: Tier.T5,
+      quality: StaffQuality.NORMAL,
+      quantity: 1,
+      total: 0
+    });
+    const movement = await prisma.staffStockMovement.findFirstOrThrow({
+      where: { type: StaffMovementType.VENTA, tier: Tier.T5, quality: StaffQuality.NORMAL }
+    });
+
+    expect(updated.quantity).toBe(1);
+    expect(movement).toMatchObject({ quantity: 1, total: 0, reason: "Venta" });
+  });
+
+  it("truncates decimal staff sale quantities", async () => {
+    await service.adjustStaffStock({
+      tier: Tier.T5,
+      quality: StaffQuality.NORMAL,
+      quantity: 5,
+      reason: "Carga inicial"
+    });
+
+    const updated = await service.sellStaffStock({
+      tier: Tier.T5,
+      quality: StaffQuality.NORMAL,
+      quantity: 2.9,
+      total: 2900
+    });
+    const movement = await prisma.staffStockMovement.findFirstOrThrow({
+      where: { type: StaffMovementType.VENTA, tier: Tier.T5, quality: StaffQuality.NORMAL }
+    });
+
+    expect(updated.quantity).toBe(3);
+    expect(movement).toMatchObject({ quantity: 2, total: 2900 });
+  });
+
+  it("discounts staff stock lots by FIFO when selling", async () => {
+    await service.adjustStaffStock({
+      tier: Tier.T5,
+      quality: StaffQuality.NORMAL,
+      quantity: 2,
+      reason: "Primer lote"
+    });
+    await service.adjustStaffStock({
+      tier: Tier.T5,
+      quality: StaffQuality.NORMAL,
+      quantity: 4,
+      reason: "Segundo lote"
+    });
+
+    await service.sellStaffStock({
+      tier: Tier.T5,
+      quality: StaffQuality.NORMAL,
+      quantity: 3,
+      total: 3000
+    });
+
+    const lots = await service.listStaffStockLots();
+
+    expect(lots).toHaveLength(1);
+    expect(lots[0]).toMatchObject({ tier: Tier.T5, quality: StaffQuality.NORMAL, quantity: 3, ticketId: null });
+  });
+
+  it("rejects non-finite staff sale quantities and negative totals without creating movements", async () => {
+    await service.adjustStaffStock({
+      tier: Tier.T5,
+      quality: StaffQuality.NORMAL,
+      quantity: 5,
+      reason: "Carga inicial"
+    });
+    await prisma.staffStockMovement.deleteMany();
+
+    await expect(
+      service.sellStaffStock({
+        tier: Tier.T5,
+        quality: StaffQuality.NORMAL,
+        quantity: Number.POSITIVE_INFINITY,
+        total: 1000
+      })
+    ).rejects.toThrow("cantidad");
+    await expect(
+      service.sellStaffStock({
+        tier: Tier.T5,
+        quality: StaffQuality.NORMAL,
+        quantity: 1,
+        total: -1
+      })
+    ).rejects.toThrow("total");
+
+    expect(await prisma.staffStockMovement.count()).toBe(0);
+    expect((await service.listStaffStock()).find((item) => item.tier === Tier.T5 && item.quality === StaffQuality.NORMAL)?.quantity).toBe(5);
   });
 
   it("rejects selling more staff than available", async () => {
@@ -594,6 +974,38 @@ describe("tickets", () => {
     expect(added.quantity).toBe(3);
     expect(removed.quantity).toBe(2);
     expect(await prisma.staffStockMovement.count({ where: { type: StaffMovementType.AJUSTE } })).toBe(2);
+    expect(await service.listStaffStockLots()).toEqual([
+      expect.objectContaining({ tier: Tier.T6, quality: StaffQuality.NOTABLE, quantity: 2, ticketId: null, unitCost: 0 })
+    ]);
+  });
+
+  it("rejects empty staff adjustment reasons without creating movements", async () => {
+    await expect(
+      service.adjustStaffStock({
+        tier: Tier.T6,
+        quality: StaffQuality.NOTABLE,
+        quantity: 2,
+        reason: "   "
+      })
+    ).rejects.toThrow("motivo");
+
+    expect(await prisma.staffStockMovement.count()).toBe(0);
+    expect((await service.listStaffStock()).find((item) => item.tier === Tier.T6 && item.quality === StaffQuality.NOTABLE)?.quantity).toBe(0);
+  });
+
+  it("truncates decimal staff adjustment quantities", async () => {
+    const updated = await service.adjustStaffStock({
+      tier: Tier.T6,
+      quality: StaffQuality.NOTABLE,
+      quantity: 2.9,
+      reason: "Conteo inicial"
+    });
+    const movement = await prisma.staffStockMovement.findFirstOrThrow({
+      where: { type: StaffMovementType.AJUSTE, tier: Tier.T6, quality: StaffQuality.NOTABLE }
+    });
+
+    expect(updated.quantity).toBe(2);
+    expect(movement).toMatchObject({ quantity: 2, reason: "Conteo inicial" });
   });
 });
 
@@ -621,6 +1033,21 @@ describe("clearHistory", () => {
     expect(stockAfterClear).toEqual(stockBeforeClear);
   });
 
+  it("unlinks staff production history without deleting staff stock", async () => {
+    await seedRecipeStock(Tier.T5, 100, 1000);
+    const ticket = await service.createTicket({ tier: Tier.T5, tax: 100 });
+    await service.closeTicket(closeInput(ticket.id));
+
+    await service.clearHistory();
+
+    expect(await prisma.staffStockItem.findUniqueOrThrow({
+      where: { tier_quality: { tier: Tier.T5, quality: StaffQuality.NORMAL } }
+    })).toMatchObject({ quantity: 6 });
+    expect(await prisma.staffStockMovement.count({ where: { ticketId: null, type: StaffMovementType.PRODUCCION } })).toBe(1);
+    expect(await prisma.ticketProducedStaff.count({ where: { ticketId: null } })).toBe(1);
+    expect(await prisma.staffStockLot.count({ where: { ticketId: null, quantity: 6 } })).toBe(1);
+  });
+
   it("is a no-op when the history is already empty", async () => {
     const openTicket = await service.createTicket({ tier: Tier.T5, tax: 100 });
 
@@ -630,6 +1057,52 @@ describe("clearHistory", () => {
     expect(history).toEqual([]);
     expect(openTickets).toHaveLength(1);
     expect(openTickets[0].id).toBe(openTicket.id);
+  });
+});
+
+describe("listStaffStock", () => {
+  it("initializes all tier and quality combinations when rows are missing", async () => {
+    await prisma.staffStockItem.deleteMany();
+
+    const stock = await service.listStaffStock();
+
+    expect(stock).toHaveLength(20);
+    expect(new Set(stock.map((item) => `${item.tier}:${item.quality}`)).size).toBe(20);
+  });
+});
+
+describe("listStaffStockLots", () => {
+  it("returns only positive lots ordered by creation date", async () => {
+    await prisma.staffStockLot.createMany({
+      data: [
+        {
+          tier: Tier.T5,
+          quality: StaffQuality.NORMAL,
+          quantity: 2,
+          unitCost: 200,
+          createdAt: new Date("2026-01-02T00:00:00.000Z")
+        },
+        {
+          tier: Tier.T5,
+          quality: StaffQuality.BUENA,
+          quantity: 0,
+          unitCost: 300,
+          createdAt: new Date("2026-01-01T00:00:00.000Z")
+        },
+        {
+          tier: Tier.T6,
+          quality: StaffQuality.NORMAL,
+          quantity: 1,
+          unitCost: 100,
+          createdAt: new Date("2026-01-01T00:00:00.000Z")
+        }
+      ]
+    });
+
+    const lots = await service.listStaffStockLots();
+
+    expect(lots).toHaveLength(2);
+    expect(lots.map((lot) => `${lot.tier}:${lot.quality}:${lot.quantity}`)).toEqual(["T6:NORMAL:1", "T5:NORMAL:2"]);
   });
 });
 

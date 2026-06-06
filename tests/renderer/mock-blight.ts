@@ -7,6 +7,7 @@ import type {
   LeftoverCreditView,
   StaffQualityView,
   StaffStockItemView,
+  StaffStockLotView,
   StaffStockMovementView,
   StockItemView
 } from "../../electron/types";
@@ -30,6 +31,7 @@ export function installBlightMock() {
     listPendingLeftoverCredits: vi.fn(),
     closeTicket: vi.fn(),
     listStaffStock: vi.fn(),
+    listStaffStockLots: vi.fn(),
     listStaffMovements: vi.fn(),
     adjustStaffStock: vi.fn(),
     sellStaffStock: vi.fn()
@@ -88,6 +90,20 @@ export function createStaffStockItem(overrides: Partial<StaffStockItemView> = {}
     tier: "T5" as AppTier,
     quality: "NORMAL" as StaffQualityView,
     quantity: 3,
+    ...overrides
+  };
+}
+
+export function createStaffStockLot(overrides: Partial<StaffStockLotView> = {}): StaffStockLotView {
+  return {
+    id: "staff-lot-1",
+    tier: "T5" as AppTier,
+    quality: "NORMAL" as StaffQualityView,
+    quantity: 3,
+    unitCost: 1000,
+    ticketId: "ticket-1",
+    ticketCode: "TICKET-",
+    createdAt: "2026-01-01T00:00:00.000Z",
     ...overrides
   };
 }

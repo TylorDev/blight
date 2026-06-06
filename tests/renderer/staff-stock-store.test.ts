@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AppTier, StaffQualityView } from "../../electron/types";
 import { useStaffStockStore } from "../../src/stores/staff-stock-store";
-import { createStaffStockItem, createStaffStockMovement, installBlightMock } from "./mock-blight";
+import { createStaffStockItem, createStaffStockLot, createStaffStockMovement, installBlightMock } from "./mock-blight";
 
 let blight: ReturnType<typeof installBlightMock>;
 
@@ -9,6 +9,7 @@ beforeEach(() => {
   blight = installBlightMock();
   useStaffStockStore.setState({
     stock: [],
+    lots: [],
     movements: [],
     loading: false,
     error: null,
@@ -39,6 +40,27 @@ describe("staff-stock-store", () => {
     expect(useStaffStockStore.getState().movements).toEqual(movements);
   });
 
+  it("loads staff stock lots from window.blight", async () => {
+    const lots = [createStaffStockLot()];
+    blight.listStaffStockLots.mockResolvedValue(lots);
+
+    await useStaffStockStore.getState().loadStaffStockLots();
+
+    expect(blight.listStaffStockLots).toHaveBeenCalledTimes(1);
+    expect(useStaffStockStore.getState().lots).toEqual(lots);
+    expect(useStaffStockStore.getState().loading).toBe(false);
+  });
+
+  it("stores and rethrows staff stock lot load errors and clears loading", async () => {
+    const failure = new Error("staff lots unavailable");
+    blight.listStaffStockLots.mockRejectedValue(failure);
+
+    await expect(useStaffStockStore.getState().loadStaffStockLots()).rejects.toThrow("staff lots unavailable");
+
+    expect(useStaffStockStore.getState().error).toBe("staff lots unavailable");
+    expect(useStaffStockStore.getState().loading).toBe(false);
+  });
+
   it("stores and rethrows staff movement load errors and clears loading", async () => {
     const failure = new Error("staff movements unavailable");
     blight.listStaffMovements.mockRejectedValue(failure);
@@ -51,9 +73,11 @@ describe("staff-stock-store", () => {
 
   it("sells staff stock and refreshes stock and movements", async () => {
     const stock = [createStaffStockItem({ quantity: 1 })];
+    const lots = [createStaffStockLot({ quantity: 1 })];
     const movements = [createStaffStockMovement({ type: "VENTA" })];
     blight.sellStaffStock.mockResolvedValue(createStaffStockItem());
     blight.listStaffStock.mockResolvedValue(stock);
+    blight.listStaffStockLots.mockResolvedValue(lots);
     blight.listStaffMovements.mockResolvedValue(movements);
 
     await useStaffStockStore.getState().sellStaffStock({
@@ -65,6 +89,7 @@ describe("staff-stock-store", () => {
 
     expect(blight.sellStaffStock).toHaveBeenCalledWith({ tier: "T5", quality: "NORMAL", quantity: 2, total: 5000 });
     expect(useStaffStockStore.getState().stock).toEqual(stock);
+    expect(useStaffStockStore.getState().lots).toEqual(lots);
     expect(useStaffStockStore.getState().movements).toEqual(movements);
   });
 
@@ -83,14 +108,17 @@ describe("staff-stock-store", () => {
 
     expect(useStaffStockStore.getState().error).toBe("sell failed");
     expect(blight.listStaffStock).not.toHaveBeenCalled();
+    expect(blight.listStaffStockLots).not.toHaveBeenCalled();
     expect(blight.listStaffMovements).not.toHaveBeenCalled();
   });
 
   it("adjusts staff stock and refreshes stock and movements", async () => {
     const stock = [createStaffStockItem({ quantity: 5 })];
+    const lots = [createStaffStockLot({ quantity: 5 })];
     const movements = [createStaffStockMovement({ type: "AJUSTE" })];
     blight.adjustStaffStock.mockResolvedValue(createStaffStockItem());
     blight.listStaffStock.mockResolvedValue(stock);
+    blight.listStaffStockLots.mockResolvedValue(lots);
     blight.listStaffMovements.mockResolvedValue(movements);
 
     await useStaffStockStore.getState().adjustStaffStock({
@@ -107,6 +135,7 @@ describe("staff-stock-store", () => {
       reason: "Correccion"
     });
     expect(useStaffStockStore.getState().stock).toEqual(stock);
+    expect(useStaffStockStore.getState().lots).toEqual(lots);
     expect(useStaffStockStore.getState().movements).toEqual(movements);
   });
 
@@ -125,6 +154,7 @@ describe("staff-stock-store", () => {
 
     expect(useStaffStockStore.getState().error).toBe("adjust failed");
     expect(blight.listStaffStock).not.toHaveBeenCalled();
+    expect(blight.listStaffStockLots).not.toHaveBeenCalled();
     expect(blight.listStaffMovements).not.toHaveBeenCalled();
   });
 

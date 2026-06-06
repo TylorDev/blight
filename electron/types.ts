@@ -75,6 +75,17 @@ export interface StaffStockMovementView {
   createdAt: string;
 }
 
+export interface StaffStockLotView {
+  id: string;
+  tier: AppTier;
+  quality: StaffQualityView;
+  quantity: number;
+  unitCost: number;
+  ticketId: string | null;
+  ticketCode: string;
+  createdAt: string;
+}
+
 export interface MissingMaterial {
   category: Category;
   tier: AppTier;
@@ -156,6 +167,7 @@ export interface AppApi {
   listPendingLeftoverCredits: (tier: AppTier) => Promise<LeftoverCreditView[]>;
   closeTicket: (input: CloseTicketInput) => Promise<CloseTicketResult>;
   listStaffStock: () => Promise<StaffStockItemView[]>;
+  listStaffStockLots: () => Promise<StaffStockLotView[]>;
   listStaffMovements: () => Promise<StaffStockMovementView[]>;
   adjustStaffStock: (input: AdjustStaffStockInput) => Promise<StaffStockItemView>;
   sellStaffStock: (input: SellStaffStockInput) => Promise<StaffStockItemView>;

@@ -16,6 +16,7 @@ import {
   listPendingLeftoverCredits,
   listStaffMovements,
   listStaffStock,
+  listStaffStockLots,
   listStock,
   listTickets,
   sellStaffStock
@@ -100,6 +101,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("leftover:listPending", (_event, tier: AppTier) => listPendingLeftoverCredits(tier));
   ipcMain.handle("ticket:close", (_event, input: CloseTicketInput) => closeTicket(input));
   ipcMain.handle("staffStock:list", () => listStaffStock());
+  ipcMain.handle("staffStock:listLots", () => listStaffStockLots());
   ipcMain.handle("staffStock:listMovements", () => listStaffMovements());
   ipcMain.handle("staffStock:adjust", (_event, input: AdjustStaffStockInput) => adjustStaffStock(input));
   ipcMain.handle("staffStock:sell", (_event, input: SellStaffStockInput) => sellStaffStock(input));

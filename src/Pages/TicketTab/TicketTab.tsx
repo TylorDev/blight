@@ -126,6 +126,7 @@ function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView }) {
   const setMissingMaterials = useTicketStore((state) => state.setMissingMaterials);
   const loadStock = useStockStore((state) => state.loadStock);
   const loadStaffStock = useStaffStockStore((state) => state.loadStaffStock);
+  const loadStaffStockLots = useStaffStockStore((state) => state.loadStaffStockLots);
   const loadStaffMovements = useStaffStockStore((state) => state.loadStaffMovements);
   const closedTickets = useHistoryStore((state) => state.tickets);
   const loadHistory = useHistoryStore((state) => state.loadHistory);
@@ -185,7 +186,7 @@ function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView }) {
         return;
       }
 
-      await Promise.all([loadStock(), loadHistory(), loadStaffStock(), loadStaffMovements()]);
+      await Promise.all([loadStock(), loadHistory(), loadStaffStock(), loadStaffStockLots(), loadStaffMovements()]);
       setOpen(false);
       setFilledDiariesQuantity("");
       setFilledDiariesDiscount("");
