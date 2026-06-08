@@ -1,9 +1,19 @@
-import type { StaffMovementType, StaffQuality, StockCategory, TicketStatus, Tier } from "@prisma/client";
+import type {
+  PurchaseInvoiceType,
+  PurchaseVendor,
+  StaffMovementType,
+  StaffQuality,
+  StockCategory,
+  TicketStatus,
+  Tier
+} from "@prisma/client";
 
 export type Category = StockCategory;
 export type AppTier = Tier;
 export type StaffQualityView = StaffQuality;
 export type StaffMovementTypeView = StaffMovementType;
+export type PurchaseInvoiceTypeView = PurchaseInvoiceType;
+export type PurchaseVendorView = PurchaseVendor;
 
 export interface StockItemView {
   id: string;
@@ -105,17 +115,39 @@ export interface LeftoverCreditView {
   appliedAt: string | null;
 }
 
+export interface PurchaseInvoiceLineView {
+  id: string;
+  category: Category;
+  tier: AppTier;
+  quantity: number;
+  total: number;
+  createdAt: string;
+}
+
+export interface PurchaseInvoiceView {
+  id: number;
+  number: string;
+  type: PurchaseInvoiceTypeView;
+  vendor: PurchaseVendorView;
+  client: string;
+  total: number;
+  createdAt: string;
+  lines: PurchaseInvoiceLineView[];
+}
+
 export interface CreatePurchaseInput {
   category: Category;
   tier: AppTier;
   quantity: number;
   total: number;
+  vendor?: PurchaseVendorView;
 }
 
-export type BulkPurchaseItemInput = Omit<CreatePurchaseInput, "tier">;
+export type BulkPurchaseItemInput = Omit<CreatePurchaseInput, "tier" | "vendor">;
 
 export interface CreateBulkPurchaseInput {
   tier: AppTier;
+  vendor?: PurchaseVendorView;
   purchases: BulkPurchaseItemInput[];
 }
 
@@ -158,6 +190,7 @@ export interface AppApi {
   clearStock: () => Promise<StockItemView[]>;
   createPurchase: (input: CreatePurchaseInput) => Promise<StockItemView>;
   createBulkPurchase: (input: CreateBulkPurchaseInput) => Promise<StockItemView[]>;
+  listPurchaseInvoices: () => Promise<PurchaseInvoiceView[]>;
   createTicket: (input: CreateTicketInput) => Promise<FabricationTicketView>;
   deleteOpenTicket: (ticketId: string) => Promise<void>;
   listTickets: () => Promise<FabricationTicketView[]>;

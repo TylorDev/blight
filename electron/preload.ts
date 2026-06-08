@@ -15,6 +15,7 @@ const api: AppApi = {
   clearStock: () => ipcRenderer.invoke("stock:clear"),
   createPurchase: (input: CreatePurchaseInput) => ipcRenderer.invoke("purchase:create", input),
   createBulkPurchase: (input: CreateBulkPurchaseInput) => ipcRenderer.invoke("purchase:createBulk", input),
+  listPurchaseInvoices: () => ipcRenderer.invoke("purchase:listInvoices"),
   createTicket: (input: CreateTicketInput) => ipcRenderer.invoke("ticket:create", input),
   deleteOpenTicket: (ticketId: string) => ipcRenderer.invoke("ticket:deleteOpen", ticketId),
   listTickets: () => ipcRenderer.invoke("ticket:list"),

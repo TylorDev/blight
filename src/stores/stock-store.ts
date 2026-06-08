@@ -7,6 +7,7 @@ import type {
   StockItemView
 } from "../../electron/types";
 import type { FilterValue } from "../app-data";
+import { usePurchaseStore } from "./purchase-store";
 
 interface StockStore {
   stock: StockItemView[];
@@ -61,6 +62,7 @@ export const useStockStore = create<StockStore>((set, get) => ({
     try {
       await window.blight.createPurchase(input);
       await get().loadStock();
+      await usePurchaseStore.getState().loadPurchaseInvoices();
     } catch (currentError) {
       const error = currentError instanceof Error ? currentError.message : "No se pudo guardar.";
       set({ error });
@@ -72,6 +74,7 @@ export const useStockStore = create<StockStore>((set, get) => ({
     try {
       await window.blight.createBulkPurchase(input);
       await get().loadStock();
+      await usePurchaseStore.getState().loadPurchaseInvoices();
     } catch (currentError) {
       const error = currentError instanceof Error ? currentError.message : "No se pudo guardar.";
       set({ error });

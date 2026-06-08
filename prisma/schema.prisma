@@ -45,6 +45,16 @@ enum StaffMovementType {
   VENTA
 }
 
+enum PurchaseInvoiceType {
+  UNICA
+  MASIVA
+}
+
+enum PurchaseVendor {
+  PARTICULAR
+  MERCADO
+}
+
 model StockItem {
   id          String        @id @default(cuid())
   category    StockCategory
@@ -59,15 +69,27 @@ model StockItem {
 }
 
 model StockMovement {
-  id        String        @id @default(cuid())
-  type      MovementType
-  category  StockCategory
-  tier      Tier
-  quantity  Int
-  total     Float
-  ticketId  String?
-  ticket    FabricationTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
-  createdAt DateTime      @default(now())
+  id                String        @id @default(cuid())
+  type              MovementType
+  category          StockCategory
+  tier              Tier
+  quantity          Int
+  total             Float
+  ticketId          String?
+  ticket            FabricationTicket? @relation(fields: [ticketId], references: [id], onDelete: SetNull)
+  purchaseInvoiceId Int?
+  purchaseInvoice   PurchaseInvoice? @relation(fields: [purchaseInvoiceId], references: [id], onDelete: SetNull)
+  createdAt         DateTime      @default(now())
+}
+
+model PurchaseInvoice {
+  id        Int                 @id @default(autoincrement())
+  type      PurchaseInvoiceType
+  vendor    PurchaseVendor
+  client    String              @default("Tylordev")
+  total     Float               @default(0)
+  createdAt DateTime            @default(now())
+  movements StockMovement[]
 }
 
 model FabricationTicket {

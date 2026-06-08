@@ -40,6 +40,7 @@ describe("initializeDatabase", () => {
       expect.arrayContaining([
         "StockItem",
         "StockMovement",
+        "PurchaseInvoice",
         "FabricationTicket",
         "TicketConsumption",
         "TicketLeftoverCredit",
@@ -77,6 +78,60 @@ describe("createPurchase", () => {
     expect(second.total).toBe(2000);
     expect(second.averageCost).toBeCloseTo(133.3333, 4);
     expect(movements).toHaveLength(2);
+    expect(await prisma.purchaseInvoice.count()).toBe(2);
+  });
+
+  it("creates a unique purchase invoice with one line", async () => {
+    await service.createPurchase({
+      category: StockCategory.TABLAS,
+      tier: Tier.T5,
+      quantity: 10,
+      total: 1000,
+      vendor: "MERCADO"
+    });
+
+    const invoices = await service.listPurchaseInvoices();
+
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0]).toMatchObject({
+      number: "#000001",
+      type: "UNICA",
+      vendor: "MERCADO",
+      client: "Tylordev",
+      total: 1000,
+      lines: [
+        {
+          category: StockCategory.TABLAS,
+          tier: Tier.T5,
+          quantity: 10,
+          total: 1000
+        }
+      ]
+    });
+  });
+
+  it("backfills old purchase movements without invoices", async () => {
+    await prisma.stockMovement.create({
+      data: {
+        type: "COMPRA",
+        category: StockCategory.TABLAS,
+        tier: Tier.T5,
+        quantity: 7,
+        total: 700
+      }
+    });
+
+    await service.initializeDatabase();
+
+    const invoices = await service.listPurchaseInvoices();
+
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0]).toMatchObject({
+      type: "UNICA",
+      vendor: "PARTICULAR",
+      total: 700,
+      lines: [{ quantity: 7, total: 700 }]
+    });
   });
 
   it("truncates decimal quantities while preserving purchase total", async () => {
@@ -143,6 +198,29 @@ describe("createBulkPurchase", () => {
     });
     expect(movements.every((movement) => movement.tier === Tier.T5)).toBe(true);
     expect(movements).toHaveLength(3);
+  });
+
+  it("creates one massive invoice for multiple bulk purchase lines", async () => {
+    await service.createBulkPurchase({
+      tier: Tier.T5,
+      vendor: "PARTICULAR",
+      purchases: [
+        { category: StockCategory.TABLAS, quantity: 5, total: 1000 },
+        { category: StockCategory.TELAS, quantity: 4, total: 4000 }
+      ]
+    });
+
+    const invoices = await service.listPurchaseInvoices();
+
+    expect(invoices).toHaveLength(1);
+    expect(invoices[0]).toMatchObject({
+      type: "MASIVA",
+      vendor: "PARTICULAR",
+      client: "Tylordev",
+      total: 5000
+    });
+    expect(invoices[0].lines).toHaveLength(2);
+    expect(invoices[0].lines.map((line) => line.category)).toEqual([StockCategory.TABLAS, StockCategory.TELAS]);
   });
 
   it("combines repeated categories in one bulk purchase without duplicating stock rows", async () => {

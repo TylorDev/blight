@@ -55,8 +55,128 @@
   }
 }
 
+.invoice-list {
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.invoice-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 14px;
+  background: #111113;
+  color: #f4f4f5;
+  text-align: left;
+  transition:
+    border-color 140ms ease,
+    background 140ms ease,
+    transform 140ms ease;
+
+  &:hover {
+    border-color: #3f3f46;
+    background: #18181b;
+    transform: translateY(-1px);
+  }
+
+  div {
+    display: grid;
+    gap: 4px;
+  }
+
+  strong,
+  b {
+    font-size: 14px;
+  }
+
+  span {
+    color: #a1a1aa;
+    font-size: 12px;
+  }
+}
+
+.invoice-modal {
+  width: min(720px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+}
+
+.invoice-document {
+  display: grid;
+  gap: 16px;
+}
+
+.invoice-meta,
+.invoice-totals {
+  display: grid;
+  gap: 7px;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  padding: 12px;
+  background: #09090b;
+
+  span {
+    color: #d4d4d8;
+    font-size: 13px;
+  }
+
+  strong {
+    color: #fafafa;
+  }
+}
+
+.invoice-products {
+  display: grid;
+  gap: 8px;
+
+  h3 {
+    margin: 0;
+    color: #a1a1aa;
+    font-size: 12px;
+    text-transform: uppercase;
+  }
+}
+
+.invoice-product {
+  display: grid;
+  grid-template-columns: 1.2fr 0.7fr 0.9fr 1.2fr;
+  gap: 10px;
+  align-items: center;
+  min-height: 38px;
+  border: 1px solid #27272a;
+  border-radius: 6px;
+  padding: 0 10px;
+  background: #09090b;
+
+  span {
+    color: #f4f4f5;
+    font-size: 13px;
+  }
+
+  small {
+    color: #a1a1aa;
+    font-size: 12px;
+    text-align: right;
+  }
+}
+
 @media (max-width: 1080px) {
   .buy-summary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .invoice-product {
+    grid-template-columns: 1fr;
+    gap: 5px;
+    padding: 10px;
+
+    small {
+      text-align: left;
+    }
   }
 }

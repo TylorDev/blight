@@ -1,4 +1,4 @@
-import { PrismaClient, StaffQuality, StockCategory, Tier } from "@prisma/client";
+import { PrismaClient, PurchaseInvoiceType, PurchaseVendor, StaffQuality, StockCategory, Tier } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
@@ -74,10 +74,22 @@ async function main() {
       "quantity" INTEGER NOT NULL,
       "total" REAL NOT NULL,
       "ticketId" TEXT,
+      "purchaseInvoiceId" INTEGER,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT "StockMovement_ticketId_fkey"
         FOREIGN KEY ("ticketId") REFERENCES "FabricationTicket" ("id")
         ON DELETE SET NULL ON UPDATE CASCADE
+    );
+  `);
+  await addColumnIfMissing("StockMovement", "purchaseInvoiceId", "INTEGER");
+  await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PurchaseInvoice" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "type" TEXT NOT NULL,
+      "vendor" TEXT NOT NULL,
+      "client" TEXT NOT NULL DEFAULT 'Tylordev',
+      "total" REAL NOT NULL DEFAULT 0,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
   await prisma.$executeRawUnsafe(`
@@ -181,6 +193,8 @@ async function main() {
       });
     }
   }
+
+  await backfillPurchaseInvoices();
 }
 
 main()
@@ -196,5 +210,32 @@ async function addColumnIfMissing(tableName: string, columnName: string, definit
   const columns = await prisma.$queryRawUnsafe<Array<{ name: string }>>(`PRAGMA table_info("${tableName}")`);
   if (!columns.some((column) => column.name === columnName)) {
     await prisma.$executeRawUnsafe(`ALTER TABLE "${tableName}" ADD COLUMN "${columnName}" ${definition}`);
+  }
+}
+
+async function backfillPurchaseInvoices() {
+  const movements = await prisma.stockMovement.findMany({
+    where: {
+      type: "COMPRA",
+      purchaseInvoiceId: null
+    },
+    orderBy: { createdAt: "asc" }
+  });
+
+  for (const movement of movements) {
+    const invoice = await prisma.purchaseInvoice.create({
+      data: {
+        type: PurchaseInvoiceType.UNICA,
+        vendor: PurchaseVendor.PARTICULAR,
+        client: "Tylordev",
+        total: movement.total,
+        createdAt: movement.createdAt
+      }
+    });
+
+    await prisma.stockMovement.update({
+      where: { id: movement.id },
+      data: { purchaseInvoiceId: invoice.id }
+    });
   }
 }

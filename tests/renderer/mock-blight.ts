@@ -9,7 +9,8 @@ import type {
   StaffStockItemView,
   StaffStockLotView,
   StaffStockMovementView,
-  StockItemView
+  StockItemView,
+  PurchaseInvoiceView
 } from "../../electron/types";
 
 type MockBlightApi = {
@@ -22,6 +23,7 @@ export function installBlightMock() {
     clearStock: vi.fn(),
     createPurchase: vi.fn(),
     createBulkPurchase: vi.fn(),
+    listPurchaseInvoices: vi.fn(),
     createTicket: vi.fn(),
     deleteOpenTicket: vi.fn(),
     listTickets: vi.fn(),
@@ -43,6 +45,29 @@ export function installBlightMock() {
   });
 
   return blight;
+}
+
+export function createPurchaseInvoice(overrides: Partial<PurchaseInvoiceView> = {}): PurchaseInvoiceView {
+  return {
+    id: 1,
+    number: "#000001",
+    type: "UNICA",
+    vendor: "PARTICULAR",
+    client: "Tylordev",
+    total: 1000,
+    createdAt: "2026-01-01T00:00:00.000Z",
+    lines: [
+      {
+        id: "movement-1",
+        category: "TABLAS" as Category,
+        tier: "T5" as AppTier,
+        quantity: 10,
+        total: 1000,
+        createdAt: "2026-01-01T00:00:00.000Z"
+      }
+    ],
+    ...overrides
+  };
 }
 
 export function createStockItem(overrides: Partial<StockItemView> = {}): StockItemView {

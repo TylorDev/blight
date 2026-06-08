@@ -43,8 +43,8 @@ export function AppLayout({
             element={
               <PageShell eyebrow="Inventario" title="Stock de materiales" actions={<ClearStockDialog />}>
                 <section className="metrics">
-                  <Metric icon={<Archive />} label="Stock total" value={formatNumber(totals.quantity)} />
-                  <Metric icon={<CircleDollarSign />} label="Valor inventario" value={formatCurrency(totals.total)} />
+                  
+                 
                 </section>
                 <section className="panel">
                   <StockTab />

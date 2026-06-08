@@ -5,6 +5,7 @@ const expectedApiKeys = [
   "clearStock",
   "createPurchase",
   "createBulkPurchase",
+  "listPurchaseInvoices",
   "createTicket",
   "deleteOpenTicket",
   "listTickets",
@@ -46,6 +47,7 @@ describe("preload", () => {
     await api.clearStock();
     await api.createPurchase({ category: "TABLAS", tier: "T5", quantity: 1, total: 100 });
     await api.createBulkPurchase({ tier: "T5", purchases: [{ category: "TABLAS", quantity: 1, total: 100 }] });
+    await api.listPurchaseInvoices();
     await api.createTicket({ tier: "T5", tax: 100 });
     await api.deleteOpenTicket("ticket-1");
     await api.listTickets();
@@ -72,6 +74,7 @@ describe("preload", () => {
       ["stock:clear"],
       ["purchase:create", { category: "TABLAS", tier: "T5", quantity: 1, total: 100 }],
       ["purchase:createBulk", { tier: "T5", purchases: [{ category: "TABLAS", quantity: 1, total: 100 }] }],
+      ["purchase:listInvoices"],
       ["ticket:create", { tier: "T5", tax: 100 }],
       ["ticket:deleteOpen", "ticket-1"],
       ["ticket:list"],

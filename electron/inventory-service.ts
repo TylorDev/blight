@@ -1,4 +1,14 @@
-import { Prisma, PrismaClient, StaffMovementType, StaffQuality, StockCategory, TicketStatus, Tier } from "@prisma/client";
+import {
+  Prisma,
+  PrismaClient,
+  PurchaseInvoiceType,
+  PurchaseVendor,
+  StaffMovementType,
+  StaffQuality,
+  StockCategory,
+  TicketStatus,
+  Tier
+} from "@prisma/client";
 import type {
   AdjustStaffStockInput,
   CloseTicketInput,
@@ -8,6 +18,7 @@ import type {
   CreateTicketInput,
   FabricationTicketView,
   LeftoverCreditView,
+  PurchaseInvoiceView,
   SellStaffStockInput,
   StaffStockItemView,
   StaffStockLotView,
@@ -131,10 +142,23 @@ export function createInventoryService(prisma: PrismaClient) {
       "quantity" INTEGER NOT NULL,
       "total" REAL NOT NULL,
       "ticketId" TEXT,
+      "purchaseInvoiceId" INTEGER,
       "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       CONSTRAINT "StockMovement_ticketId_fkey"
         FOREIGN KEY ("ticketId") REFERENCES "FabricationTicket" ("id")
         ON DELETE SET NULL ON UPDATE CASCADE
+    );
+  `);
+    await addColumnIfMissing(prisma, "StockMovement", "purchaseInvoiceId", "INTEGER");
+
+    await prisma.$executeRawUnsafe(`
+    CREATE TABLE IF NOT EXISTS "PurchaseInvoice" (
+      "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+      "type" TEXT NOT NULL,
+      "vendor" TEXT NOT NULL,
+      "client" TEXT NOT NULL DEFAULT 'Tylordev',
+      "total" REAL NOT NULL DEFAULT 0,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
   `);
 
@@ -243,6 +267,7 @@ export function createInventoryService(prisma: PrismaClient) {
 
     await ensureStockItems();
     await ensureStaffStockItems();
+    await backfillPurchaseInvoices(prisma);
   }
 
   async function ensureStaffStockItems() {
@@ -314,6 +339,18 @@ export function createInventoryService(prisma: PrismaClient) {
       orderBy: { createdAt: "desc" }
     });
     return movements.map(toStaffStockMovementView);
+  }
+
+  async function listPurchaseInvoices(): Promise<PurchaseInvoiceView[]> {
+    const invoices = await prisma.purchaseInvoice.findMany({
+      include: {
+        movements: {
+          orderBy: { createdAt: "asc" }
+        }
+      },
+      orderBy: { createdAt: "desc" }
+    });
+    return invoices.map(toPurchaseInvoiceView);
   }
 
   async function adjustStaffStock(input: AdjustStaffStockInput): Promise<StaffStockItemView> {
@@ -407,8 +444,17 @@ export function createInventoryService(prisma: PrismaClient) {
     if (input.quantity <= 0 || input.total <= 0) {
       throw new Error("La cantidad y el total deben ser mayores a cero.");
     }
+    const vendor = normalizePurchaseVendor(input.vendor);
 
     const item = await prisma.$transaction(async (tx) => {
+      const invoice = await tx.purchaseInvoice.create({
+        data: {
+          type: PurchaseInvoiceType.UNICA,
+          vendor,
+          client: "Tylordev",
+          total: input.total
+        }
+      });
       const current = await tx.stockItem.upsert({
         where: { category_tier: { category: input.category, tier: input.tier } },
         update: {},
@@ -429,7 +475,8 @@ export function createInventoryService(prisma: PrismaClient) {
           category: input.category,
           tier: input.tier,
           quantity: Math.trunc(input.quantity),
-          total: input.total
+          total: input.total,
+          purchaseInvoiceId: invoice.id
         }
       });
 
@@ -443,6 +490,7 @@ export function createInventoryService(prisma: PrismaClient) {
     if (input.purchases.length === 0) {
       throw new Error("No hay compras para registrar.");
     }
+    const vendor = normalizePurchaseVendor(input.vendor);
 
     for (const purchase of input.purchases) {
       if (purchase.quantity <= 0 || purchase.total <= 0) {
@@ -452,6 +500,14 @@ export function createInventoryService(prisma: PrismaClient) {
 
     const items = await prisma.$transaction(async (tx) => {
       const updatedItems = [];
+      const invoice = await tx.purchaseInvoice.create({
+        data: {
+          type: PurchaseInvoiceType.MASIVA,
+          vendor,
+          client: "Tylordev",
+          total: input.purchases.reduce((total, purchase) => total + purchase.total, 0)
+        }
+      });
 
       for (const purchase of input.purchases) {
         const current = await tx.stockItem.upsert({
@@ -474,7 +530,8 @@ export function createInventoryService(prisma: PrismaClient) {
             category: purchase.category,
             tier: input.tier,
             quantity: Math.trunc(purchase.quantity),
-            total: purchase.total
+            total: purchase.total,
+            purchaseInvoiceId: invoice.id
           }
         });
 
@@ -850,6 +907,7 @@ export function createInventoryService(prisma: PrismaClient) {
     sellStaffStock,
     createPurchase,
     createBulkPurchase,
+    listPurchaseInvoices,
     createTicket,
     listTickets,
     listOpenTickets,
@@ -880,6 +938,7 @@ export const adjustStaffStock = (input: AdjustStaffStockInput) => getDefaultServ
 export const sellStaffStock = (input: SellStaffStockInput) => getDefaultService().sellStaffStock(input);
 export const createPurchase = (input: CreatePurchaseInput) => getDefaultService().createPurchase(input);
 export const createBulkPurchase = (input: CreateBulkPurchaseInput) => getDefaultService().createBulkPurchase(input);
+export const listPurchaseInvoices = () => getDefaultService().listPurchaseInvoices();
 export const createTicket = (input: CreateTicketInput) => getDefaultService().createTicket(input);
 export const listTickets = () => getDefaultService().listTickets();
 export const listOpenTickets = () => getDefaultService().listOpenTickets();
@@ -1077,6 +1136,68 @@ function toLeftoverCreditView(credit: {
   };
 }
 
+function toPurchaseInvoiceView(invoice: {
+  id: number;
+  type: PurchaseInvoiceType;
+  vendor: PurchaseVendor;
+  client: string;
+  total: number;
+  createdAt: Date;
+  movements: Array<{
+    id: string;
+    category: StockCategory;
+    tier: Tier;
+    quantity: number;
+    total: number;
+    createdAt: Date;
+  }>;
+}): PurchaseInvoiceView {
+  return {
+    id: invoice.id,
+    number: `#${String(invoice.id).padStart(6, "0")}`,
+    type: invoice.type,
+    vendor: invoice.vendor,
+    client: invoice.client,
+    total: invoice.total,
+    createdAt: invoice.createdAt.toISOString(),
+    lines: invoice.movements.map((movement) => ({
+      id: movement.id,
+      category: movement.category,
+      tier: movement.tier,
+      quantity: movement.quantity,
+      total: movement.total,
+      createdAt: movement.createdAt.toISOString()
+    }))
+  };
+}
+
+async function backfillPurchaseInvoices(prisma: PrismaClient) {
+  const movements = await prisma.stockMovement.findMany({
+    where: {
+      type: "COMPRA",
+      purchaseInvoiceId: null
+    },
+    orderBy: { createdAt: "asc" }
+  });
+
+  for (const movement of movements) {
+    const invoice = await prisma.purchaseInvoice.create({
+      data: {
+        type: PurchaseInvoiceType.UNICA,
+        vendor: PurchaseVendor.PARTICULAR,
+        client: "Tylordev",
+        total: movement.total,
+        createdAt: movement.createdAt
+      }
+    });
+
+    await prisma.stockMovement.update({
+      where: { id: movement.id },
+      data: { purchaseInvoiceId: invoice.id }
+    });
+  }
+}
+
 function calculateCraftingTax(tier: Tier, tax: number) {
   return tax * craftingTaxBase * craftingTaxMultipliers[tier] * staffQuantity;
 }
@@ -1156,6 +1277,18 @@ function validateStaffSale(input: SellStaffStockInput) {
   if (!Number.isFinite(input.total) || input.total < 0) {
     throw new Error("El total de venta debe ser mayor o igual a cero.");
   }
+}
+
+function normalizePurchaseVendor(vendor: PurchaseVendor | undefined) {
+  if (!vendor) {
+    return PurchaseVendor.PARTICULAR;
+  }
+
+  if (![PurchaseVendor.PARTICULAR, PurchaseVendor.MERCADO].includes(vendor)) {
+    throw new Error("Vendedor de compra invalido.");
+  }
+
+  return vendor;
 }
 
 function getRequiredQuantity(tier: Tier, category: StockCategory) {

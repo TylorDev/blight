@@ -3,6 +3,7 @@ import { Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { AppLayout } from "./AppShell/AppLayout";
 import { useHistoryStore } from "./stores/history-store";
+import { usePurchaseStore } from "./stores/purchase-store";
 import { useStaffStockStore } from "./stores/staff-stock-store";
 import { useStockStore } from "./stores/stock-store";
 import { useTicketStore } from "./stores/ticket-store";
@@ -18,6 +19,8 @@ function App() {
   const closedTicketsCount = useHistoryStore((state) => state.tickets.length);
   const historyError = useHistoryStore((state) => state.error);
   const loadHistory = useHistoryStore((state) => state.loadHistory);
+  const purchaseError = usePurchaseStore((state) => state.error);
+  const loadPurchaseInvoices = usePurchaseStore((state) => state.loadPurchaseInvoices);
   const staffStock = useStaffStockStore((state) => state.stock);
   const staffStockError = useStaffStockStore((state) => state.error);
   const loadStaffStock = useStaffStockStore((state) => state.loadStaffStock);
@@ -26,10 +29,26 @@ function App() {
   const [initialLoading, setInitialLoading] = useState(true);
 
   useEffect(() => {
-    void Promise.all([loadStock(), loadTickets(), loadHistory(), loadStaffStock(), loadStaffStockLots(), loadStaffMovements()])
+    void Promise.all([
+      loadStock(),
+      loadTickets(),
+      loadHistory(),
+      loadPurchaseInvoices(),
+      loadStaffStock(),
+      loadStaffStockLots(),
+      loadStaffMovements()
+    ])
       .catch(() => undefined)
       .finally(() => setInitialLoading(false));
-  }, [loadHistory, loadStaffMovements, loadStaffStock, loadStaffStockLots, loadStock, loadTickets]);
+  }, [
+    loadHistory,
+    loadPurchaseInvoices,
+    loadStaffMovements,
+    loadStaffStock,
+    loadStaffStockLots,
+    loadStock,
+    loadTickets
+  ]);
 
   const totals = useMemo(() => {
     return stock.reduce(
@@ -42,7 +61,7 @@ function App() {
   }, [stock]);
 
   const staffQuantity = staffStock.reduce((total, item) => total + item.quantity, 0);
-  const errors = [stockError, ticketError, historyError, staffStockError].filter(Boolean);
+  const errors = [stockError, ticketError, historyError, purchaseError, staffStockError].filter(Boolean);
 
   if (initialLoading) {
     return (

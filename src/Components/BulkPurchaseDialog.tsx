@@ -1,8 +1,16 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Loader2, PackagePlus, X } from "lucide-react";
 import { FormEvent, useState } from "react";
-import type { AppTier, Category } from "../../electron/types";
-import { categories, categoryLabels, createEmptyBulkDraft, tierLabels, tiers } from "../app-data";
+import type { AppTier, Category, PurchaseVendorView } from "../../electron/types";
+import {
+  categories,
+  categoryLabels,
+  createEmptyBulkDraft,
+  purchaseVendorLabels,
+  purchaseVendors,
+  tierLabels,
+  tiers
+} from "../app-data";
 import { calculateTotal, parseThousands } from "../number-format";
 import { updatePurchaseCalculation } from "../purchase-calculator";
 import { useStockStore } from "../stores/stock-store";
@@ -12,6 +20,7 @@ import { TierBadge } from "./TierBadge";
 export function BulkPurchaseDialog() {
   const [open, setOpen] = useState(false);
   const [tier, setTier] = useState<AppTier>("T5");
+  const [vendor, setVendor] = useState<PurchaseVendorView>("PARTICULAR");
   const [draft, setDraft] = useState(() => createEmptyBulkDraft());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +70,7 @@ export function BulkPurchaseDialog() {
         throw new Error("No hay compras para registrar.");
       }
 
-      await createBulkPurchase({ tier, purchases });
+      await createBulkPurchase({ tier, vendor, purchases });
       setDraft(createEmptyBulkDraft());
       setOpen(false);
     } catch (currentError) {
@@ -93,6 +102,13 @@ export function BulkPurchaseDialog() {
               onValueChange={(value) => setTier(value as AppTier)}
               options={tiers}
               labels={tierLabels}
+            />
+            <SelectField
+              label="Vendedor"
+              value={vendor}
+              onValueChange={(value) => setVendor(value as PurchaseVendorView)}
+              options={purchaseVendors}
+              labels={purchaseVendorLabels}
             />
             <div className="bulk-table">
               <div className="bulk-row bulk-head">

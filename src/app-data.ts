@@ -3,6 +3,7 @@ import type {
   Category,
   FabricationTicketView,
   LeftoverCreditView,
+  PurchaseVendorView,
   StaffMovementTypeView,
   StaffQualityView,
   StockItemView
@@ -18,6 +19,7 @@ export const staffQualities: StaffQualityView[] = [
   "SOBRESALIENTE",
   "OBRA_MAESTRA"
 ];
+export const purchaseVendors: PurchaseVendorView[] = ["PARTICULAR", "MERCADO"];
 
 export const tierLabels: Record<AppTier, string> = {
   T5: "T5",
@@ -39,6 +41,11 @@ export const staffQualityLabels: Record<StaffQualityView, string> = {
   NOTABLE: "Notable",
   SOBRESALIENTE: "Sobresaliente",
   OBRA_MAESTRA: "Obra Maestra"
+};
+
+export const purchaseVendorLabels: Record<PurchaseVendorView, string> = {
+  PARTICULAR: "Particular",
+  MERCADO: "Mercado"
 };
 
 export const staffQualityToneClasses: Record<StaffQualityView, string> = {

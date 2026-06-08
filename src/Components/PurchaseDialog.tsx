@@ -1,8 +1,8 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Loader2, Plus, X } from "lucide-react";
 import { FormEvent, useState } from "react";
-import type { AppTier, Category } from "../../electron/types";
-import { categories, categoryLabels, tierLabels, tiers } from "../app-data";
+import type { AppTier, Category, PurchaseVendorView } from "../../electron/types";
+import { categories, categoryLabels, purchaseVendorLabels, purchaseVendors, tierLabels, tiers } from "../app-data";
 import { parseThousands } from "../number-format";
 import { createEmptyPurchaseCalculation, updatePurchaseCalculation } from "../purchase-calculator";
 import { useStockStore } from "../stores/stock-store";
@@ -12,6 +12,7 @@ export function PurchaseDialog() {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<Category>("TABLAS");
   const [tier, setTier] = useState<AppTier>("T5");
+  const [vendor, setVendor] = useState<PurchaseVendorView>("PARTICULAR");
   const [draft, setDraft] = useState(() => createEmptyPurchaseCalculation());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +31,8 @@ export function PurchaseDialog() {
         category,
         tier,
         quantity: parseThousands(draft.quantity),
-        total: parseThousands(draft.total)
+        total: parseThousands(draft.total),
+        vendor
       });
       setOpen(false);
       setDraft(createEmptyPurchaseCalculation());
@@ -70,6 +72,13 @@ export function PurchaseDialog() {
               onValueChange={(value) => setTier(value as AppTier)}
               options={tiers}
               labels={tierLabels}
+            />
+            <SelectField
+              label="Vendedor"
+              value={vendor}
+              onValueChange={(value) => setVendor(value as PurchaseVendorView)}
+              options={purchaseVendors}
+              labels={purchaseVendorLabels}
             />
             <label className="field">
               Cantidad

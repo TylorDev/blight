@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import type { AppTier, Category } from "../../electron/types";
+import { usePurchaseStore } from "../../src/stores/purchase-store";
 import { useStockStore } from "../../src/stores/stock-store";
 import { createStockItem, installBlightMock } from "./mock-blight";
 
@@ -14,6 +15,8 @@ beforeEach(() => {
     categoryFilter: "TODOS",
     tierFilter: "TODOS"
   });
+  usePurchaseStore.setState({ invoices: [], loading: false, error: null });
+  blight.listPurchaseInvoices.mockResolvedValue([]);
 });
 
 describe("stock-store", () => {
@@ -48,6 +51,7 @@ describe("stock-store", () => {
       total: 200
     });
     expect(blight.listStock).toHaveBeenCalledTimes(1);
+    expect(blight.listPurchaseInvoices).toHaveBeenCalledTimes(1);
     expect(useStockStore.getState().stock).toEqual(nextStock);
   });
 
@@ -83,6 +87,7 @@ describe("stock-store", () => {
       purchases: [{ category: "TELAS", quantity: 3, total: 900 }]
     });
     expect(blight.listStock).toHaveBeenCalledTimes(1);
+    expect(blight.listPurchaseInvoices).toHaveBeenCalledTimes(1);
     expect(useStockStore.getState().stock).toEqual(nextStock);
   });
 
