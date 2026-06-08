@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { formatThousands, normalizeThousandsInput, parseThousands } from "../../src/number-format";
+import {
+  calculateAverageCost,
+  calculateQuantity,
+  calculateTotal,
+  formatThousands,
+  normalizeThousandsInput,
+  parseThousands
+} from "../../src/number-format";
 
 describe("number-format", () => {
   it.each([
@@ -30,5 +37,20 @@ describe("number-format", () => {
   it("normalizes and parses mixed currency text", () => {
     expect(normalizeThousandsInput("$1.200abc")).toBe("1.200");
     expect(parseThousands("$1.200abc")).toBe(1200);
+  });
+
+  it("calculates average cost from quantity and total", () => {
+    expect(calculateAverageCost(10, 5000)).toBe(500);
+    expect(calculateAverageCost(0, 5000)).toBe(0);
+  });
+
+  it("calculates total from quantity and average cost", () => {
+    expect(calculateTotal(10, 500)).toBe(5000);
+    expect(calculateTotal(10, 0)).toBe(0);
+  });
+
+  it("calculates quantity from total and average cost", () => {
+    expect(calculateQuantity(5000, 500)).toBe(10);
+    expect(calculateQuantity(5000, 0)).toBe(0);
   });
 });

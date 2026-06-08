@@ -4,7 +4,8 @@ import {
   formatDate,
   formatNumber,
   staffMovementTypeLabels,
-  staffQualityLabels
+  staffQualityLabels,
+  staffQualityToneClasses
 } from "../../../app-data";
 import { EmptyState, TierBadge } from "../../../Components";
 
@@ -33,7 +34,9 @@ export function StaffMovementTable({ movements }: StaffMovementTableProps) {
           <span>{formatDate(movement.createdAt)}</span>
           <span>{staffMovementTypeLabels[movement.type]}</span>
           <TierBadge tier={movement.tier} />
-          <span>{staffQualityLabels[movement.quality]}</span>
+          <span className={`staff-quality-chip ${staffQualityToneClasses[movement.quality]}`}>
+            {staffQualityLabels[movement.quality]}
+          </span>
           <strong>{formatNumber(movement.quantity)}</strong>
           <span>{formatCurrency(movement.total)}</span>
           <span>{movement.reason ?? (movement.ticketId ? `Ticket ${movement.ticketId.slice(0, 8)}` : "-")}</span>

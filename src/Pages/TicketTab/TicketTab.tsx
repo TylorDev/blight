@@ -11,7 +11,8 @@ import {
   getDefaultFilledDiariesQuantity,
   getRecentLeftoverQuantitySuggestions,
   staffQualities,
-  staffQualityLabels
+  staffQualityLabels,
+  staffQualityToneClasses
 } from "../../app-data";
 import { EmptyState, Recipe, TicketCosts, TierBadge } from "../../Components";
 import { normalizeThousandsInput, parseThousands } from "../../number-format";
@@ -274,8 +275,8 @@ function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView }) {
             <div className="staff-production-fields">
               <strong>Bastones creados</strong>
               {staffQualities.map((quality) => (
-                <label className="field" key={quality}>
-                  {staffQualityLabels[quality]}
+                <label className={`field staff-quality-field ${staffQualityToneClasses[quality]}`} key={quality}>
+                  <span>{staffQualityLabels[quality]}</span>
                   <input
                     value={producedStaffs[quality] ?? ""}
                     onChange={(event) =>

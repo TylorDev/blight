@@ -1,0 +1,62 @@
+.buy-page {
+  display: grid;
+  gap: 14px;
+}
+
+.buy-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.buy-table {
+  display: grid;
+}
+
+.buy-row {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr 1fr;
+  align-items: center;
+  gap: 14px;
+  min-height: 44px;
+  border-bottom: 1px solid #18181b;
+  padding: 0 16px;
+  color: #e4e4e7;
+
+  &:last-child {
+    border-bottom: 0;
+  }
+}
+
+.buy-row--detail {
+  grid-template-columns: 1.4fr 0.7fr 1fr 1fr 1fr;
+}
+
+.buy-row--head {
+  min-height: 38px;
+  color: #71717a;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.buy-placeholder {
+  display: grid;
+  gap: 5px;
+
+  strong {
+    color: #f4f4f5;
+    font-size: 13px;
+  }
+
+  span {
+    color: #a1a1aa;
+    font-size: 13px;
+    line-height: 1.45;
+  }
+}
+
+@media (max-width: 1080px) {
+  .buy-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

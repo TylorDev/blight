@@ -6,6 +6,7 @@ export { PurchaseDialog } from "./PurchaseDialog";
 export { Recipe } from "./Recipe";
 export { SelectField } from "./SelectField";
 export { TicketCosts } from "./TicketCosts";
+export { TicketDetailDialog } from "./TicketDetailDialog";
 export { TicketDialog } from "./TicketDialog";
 export { TicketPreview } from "./TicketPreview";
 export { TierBadge } from "./TierBadge";

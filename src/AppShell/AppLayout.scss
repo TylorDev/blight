@@ -1,0 +1,24 @@
+.app-frame {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  width: min(100%, 1360px);
+  margin: 0 auto;
+  padding: 28px;
+}
+
+@media (max-width: 1080px) {
+  .app-frame {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .app-shell {
+    padding: 18px;
+  }
+}

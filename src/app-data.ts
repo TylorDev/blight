@@ -7,6 +7,7 @@ import type {
   StaffQualityView,
   StockItemView
 } from "../electron/types";
+import { createEmptyPurchaseCalculation, type PurchaseCalculationState } from "./purchase-calculator";
 
 export const categories: Category[] = ["TABLAS", "TELAS", "DIARIOS_VACIOS", "ARTEFACTOS"];
 export const tiers: AppTier[] = ["T5", "T6", "T7", "T8"];
@@ -40,6 +41,14 @@ export const staffQualityLabels: Record<StaffQualityView, string> = {
   OBRA_MAESTRA: "Obra Maestra"
 };
 
+export const staffQualityToneClasses: Record<StaffQualityView, string> = {
+  NORMAL: "quality-tone--normal",
+  BUENA: "quality-tone--buena",
+  NOTABLE: "quality-tone--notable",
+  SOBRESALIENTE: "quality-tone--sobresaliente",
+  OBRA_MAESTRA: "quality-tone--obra-maestra"
+};
+
 export const staffMovementTypeLabels: Record<StaffMovementTypeView, string> = {
   PRODUCCION: "Produccion",
   AJUSTE: "Ajuste",
@@ -69,11 +78,11 @@ export const recipeBase: Array<{ category: Category; quantity: number }> = [
 ];
 
 export type FilterValue<T extends string> = T | "TODOS";
-export type BulkPurchaseDraft = Record<Category, { quantity: string; total: string }>;
+export type BulkPurchaseDraft = Record<Category, PurchaseCalculationState>;
 
 export function createEmptyBulkDraft() {
   return Object.fromEntries(
-    categories.map((category) => [category, { quantity: "", total: "" }])
+    categories.map((category) => [category, createEmptyPurchaseCalculation()])
   ) as BulkPurchaseDraft;
 }
 

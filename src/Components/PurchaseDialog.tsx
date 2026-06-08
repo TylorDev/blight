@@ -3,7 +3,8 @@ import { Check, Loader2, Plus, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import type { AppTier, Category } from "../../electron/types";
 import { categories, categoryLabels, tierLabels, tiers } from "../app-data";
-import { normalizeThousandsInput, parseThousands } from "../number-format";
+import { parseThousands } from "../number-format";
+import { createEmptyPurchaseCalculation, updatePurchaseCalculation } from "../purchase-calculator";
 import { useStockStore } from "../stores/stock-store";
 import { SelectField } from "./SelectField";
 
@@ -11,11 +12,14 @@ export function PurchaseDialog() {
   const [open, setOpen] = useState(false);
   const [category, setCategory] = useState<Category>("TABLAS");
   const [tier, setTier] = useState<AppTier>("T5");
-  const [quantity, setQuantity] = useState("1");
-  const [total, setTotal] = useState("");
+  const [draft, setDraft] = useState(() => createEmptyPurchaseCalculation());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createPurchase = useStockStore((state) => state.createPurchase);
+
+  const updateDraft = (field: "quantity" | "averageCost" | "total", value: string) => {
+    setDraft((current) => updatePurchaseCalculation(current, field, value));
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -25,12 +29,11 @@ export function PurchaseDialog() {
       await createPurchase({
         category,
         tier,
-        quantity: parseThousands(quantity),
-        total: parseThousands(total)
+        quantity: parseThousands(draft.quantity),
+        total: parseThousands(draft.total)
       });
       setOpen(false);
-      setQuantity("1");
-      setTotal("");
+      setDraft(createEmptyPurchaseCalculation());
     } catch (currentError) {
       setError(currentError instanceof Error ? currentError.message : "No se pudo guardar.");
     } finally {
@@ -71,8 +74,18 @@ export function PurchaseDialog() {
             <label className="field">
               Cantidad
               <input
-                value={quantity}
-                onChange={(event) => setQuantity(normalizeThousandsInput(event.target.value))}
+                value={draft.quantity}
+                onChange={(event) => updateDraft("quantity", event.target.value)}
+                type="text"
+                inputMode="numeric"
+                pattern="[0-9.]*"
+              />
+            </label>
+            <label className="field">
+              Precio promedio
+              <input
+                value={draft.averageCost}
+                onChange={(event) => updateDraft("averageCost", event.target.value)}
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9.]*"
@@ -81,8 +94,8 @@ export function PurchaseDialog() {
             <label className="field">
               Precio total
               <input
-                value={total}
-                onChange={(event) => setTotal(normalizeThousandsInput(event.target.value))}
+                value={draft.total}
+                onChange={(event) => updateDraft("total", event.target.value)}
                 type="text"
                 inputMode="numeric"
                 pattern="[0-9.]*"

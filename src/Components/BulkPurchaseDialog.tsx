@@ -3,7 +3,8 @@ import { Check, Loader2, PackagePlus, X } from "lucide-react";
 import { FormEvent, useState } from "react";
 import type { AppTier, Category } from "../../electron/types";
 import { categories, categoryLabels, createEmptyBulkDraft, tierLabels, tiers } from "../app-data";
-import { normalizeThousandsInput, parseThousands } from "../number-format";
+import { calculateTotal, parseThousands } from "../number-format";
+import { updatePurchaseCalculation } from "../purchase-calculator";
 import { useStockStore } from "../stores/stock-store";
 import { SelectField } from "./SelectField";
 import { TierBadge } from "./TierBadge";
@@ -16,13 +17,10 @@ export function BulkPurchaseDialog() {
   const [error, setError] = useState<string | null>(null);
   const createBulkPurchase = useStockStore((state) => state.createBulkPurchase);
 
-  const updateDraft = (category: Category, field: "quantity" | "total", value: string) => {
+  const updateDraft = (category: Category, field: "quantity" | "averageCost" | "total", value: string) => {
     setDraft((current) => ({
       ...current,
-      [category]: {
-        ...current[category],
-        [field]: value
-      }
+      [category]: updatePurchaseCalculation(current[category], field, value)
     }));
   };
 
@@ -37,18 +35,20 @@ export function BulkPurchaseDialog() {
       for (const category of categories) {
         const row = draft[category];
         const quantityFilled = row.quantity.trim() !== "";
+        const averageCostFilled = row.averageCost.trim() !== "";
         const totalFilled = row.total.trim() !== "";
 
-        if (!quantityFilled && !totalFilled) {
+        if (!quantityFilled && !averageCostFilled && !totalFilled) {
           continue;
         }
 
-        if (quantityFilled !== totalFilled) {
-          throw new Error(`Completa Cantidad y Total en ${categoryLabels[category]} ${tier}.`);
+        if (!quantityFilled || (!averageCostFilled && !totalFilled)) {
+          throw new Error(`Completa Cantidad y Total o Precio promedio en ${categoryLabels[category]} ${tier}.`);
         }
 
         const quantity = parseThousands(row.quantity);
-        const total = parseThousands(row.total);
+        const averageCost = parseThousands(row.averageCost);
+        const total = parseThousands(row.total) || calculateTotal(quantity, averageCost);
 
         if (quantity <= 0 || total <= 0) {
           throw new Error(`Cantidad y Total deben ser mayores a cero en ${categoryLabels[category]} ${tier}.`);
@@ -98,6 +98,7 @@ export function BulkPurchaseDialog() {
               <div className="bulk-row bulk-head">
                 <span>Item</span>
                 <span>Cantidad</span>
+                <span>Precio promedio</span>
                 <span>Total</span>
               </div>
               {categories.map((category) => (
@@ -107,7 +108,15 @@ export function BulkPurchaseDialog() {
                   </span>
                   <input
                     value={draft[category].quantity}
-                    onChange={(event) => updateDraft(category, "quantity", normalizeThousandsInput(event.target.value))}
+                    onChange={(event) => updateDraft(category, "quantity", event.target.value)}
+                    type="text"
+                    inputMode="numeric"
+                    pattern="[0-9.]*"
+                    placeholder="Sin cambio"
+                  />
+                  <input
+                    value={draft[category].averageCost}
+                    onChange={(event) => updateDraft(category, "averageCost", event.target.value)}
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9.]*"
@@ -115,7 +124,7 @@ export function BulkPurchaseDialog() {
                   />
                   <input
                     value={draft[category].total}
-                    onChange={(event) => updateDraft(category, "total", normalizeThousandsInput(event.target.value))}
+                    onChange={(event) => updateDraft(category, "total", event.target.value)}
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9.]*"
