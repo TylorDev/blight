@@ -1,14 +1,36 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Loader2, Trash2, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { FabricationTicketView } from "../../../electron/types";
-import { formatDate } from "../../app-data";
+import { categories, categoryLabels, formatCurrency, formatDate, tierLabels, tiers } from "../../app-data";
 import { CloseTicketDialog, EmptyState, Recipe, TicketCosts, TicketDialogXL, TierBadge } from "../../Components";
+import { useHistoryStore } from "../../stores/history-store";
 import { useTicketStore } from "../../stores/ticket-store";
 import "./TicketTab.scss";
 
 export function TicketTab() {
   const tickets = useTicketStore((state) => state.tickets);
+  const closedTickets = useHistoryStore((state) => state.tickets);
+  const consumptionSummary = useMemo(() => {
+    const consumptions = closedTickets.flatMap((ticket) => ticket.consumptions);
+    const materialSummary = categories.map((category) => ({
+      key: category,
+      label: categoryLabels[category],
+      total: consumptions
+        .filter((consumption) => consumption.category === category)
+        .reduce((sum, consumption) => sum + consumption.discountedTotal, 0)
+    }));
+    const tierSummary = tiers.map((tier) => ({
+      key: tier,
+      label: tierLabels[tier],
+      total: consumptions
+        .filter((consumption) => consumption.tier === tier)
+        .reduce((sum, consumption) => sum + consumption.discountedTotal, 0)
+    }));
+    const total = consumptions.reduce((sum, consumption) => sum + consumption.discountedTotal, 0);
+
+    return { materialSummary, tierSummary, total };
+  }, [closedTickets]);
 
   return (
     <>
@@ -19,6 +41,40 @@ export function TicketTab() {
         </div>
         <TicketDialogXL />
       </div>
+      <section className="ticket-summary" aria-label="Resumen de inversion consumida en tickets">
+        <div className="ticket-summary__group">
+          <div className="ticket-summary__group-head">
+            <strong>Inversion por material</strong>
+            <span>{formatCurrency(consumptionSummary.total)}</span>
+          </div>
+          <div className="ticket-summary__grid">
+            {consumptionSummary.materialSummary.map((item) => (
+              <article className="ticket-summary__item" key={item.key}>
+                <span className="ticket-summary__label">{item.label}</span>
+                <strong className="ticket-summary__value">{formatCurrency(item.total)}</strong>
+              </article>
+            ))}
+          </div>
+        </div>
+        <div className="ticket-summary__group">
+          <div className="ticket-summary__group-head">
+            <strong>Inversion por tier</strong>
+            <span>Tickets cerrados</span>
+          </div>
+          <div className="ticket-summary__grid">
+            {consumptionSummary.tierSummary.map((item) => (
+              <article className="ticket-summary__item" key={item.key}>
+                <span className="ticket-summary__label">{item.label}</span>
+                <strong className="ticket-summary__value">{formatCurrency(item.total)}</strong>
+              </article>
+            ))}
+          </div>
+        </div>
+        <article className="ticket-summary__item ticket-summary__item--total">
+          <span className="ticket-summary__label">Total consumido en tickets</span>
+          <strong className="ticket-summary__value">{formatCurrency(consumptionSummary.total)}</strong>
+        </article>
+      </section>
       <div className="ticket-grid">
         {tickets.length === 0 ? <EmptyState text="No hay tickets abiertos." /> : null}
         {tickets.map((ticket) => (

@@ -1,22 +1,55 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Loader2, Plus, X } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import type { AppTier, Category, PurchaseVendorView } from "../../electron/types";
 import { categories, categoryLabels, purchaseVendorLabels, purchaseVendors, tierLabels, tiers } from "../app-data";
-import { parseThousands } from "../number-format";
-import { createEmptyPurchaseCalculation, updatePurchaseCalculation } from "../purchase-calculator";
+import { formatThousands, parseThousands } from "../number-format";
+import {
+  createEmptyPurchaseCalculation,
+  type PurchaseCalculationState,
+  updatePurchaseCalculation
+} from "../purchase-calculator";
 import { useStockStore } from "../stores/stock-store";
 import { SelectField } from "./SelectField";
 
-export function PurchaseDialog() {
-  const [open, setOpen] = useState(false);
-  const [category, setCategory] = useState<Category>("TABLAS");
-  const [tier, setTier] = useState<AppTier>("T5");
+interface PurchaseDialogProps {
+  initialAverageCost?: number;
+  initialCategory?: Category;
+  initialTier?: AppTier;
+  onOpenChange?: (open: boolean) => void;
+  open?: boolean;
+  showTrigger?: boolean;
+}
+
+export function PurchaseDialog({
+  initialAverageCost,
+  initialCategory = "TABLAS",
+  initialTier = "T5",
+  onOpenChange,
+  open: controlledOpen,
+  showTrigger = true
+}: PurchaseDialogProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
+  const setOpen = onOpenChange ?? setInternalOpen;
+  const [category, setCategory] = useState<Category>(initialCategory);
+  const [tier, setTier] = useState<AppTier>(initialTier);
   const [vendor, setVendor] = useState<PurchaseVendorView>("PARTICULAR");
   const [draft, setDraft] = useState(() => createEmptyPurchaseCalculation());
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const createPurchase = useStockStore((state) => state.createPurchase);
+
+  useEffect(() => {
+    if (!open) {
+      return;
+    }
+
+    setCategory(initialCategory);
+    setTier(initialTier);
+    setDraft(createInitialDraft(initialAverageCost));
+    setError(null);
+  }, [initialAverageCost, initialCategory, initialTier, open]);
 
   const updateDraft = (field: "quantity" | "averageCost" | "total", value: string) => {
     setDraft((current) => updatePurchaseCalculation(current, field, value));
@@ -45,12 +78,14 @@ export function PurchaseDialog() {
 
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
-      <Dialog.Trigger asChild>
-        <button className="button">
-          <Plus />
-          Compra
-        </button>
-      </Dialog.Trigger>
+      {showTrigger ? (
+        <Dialog.Trigger asChild>
+          <button className="button">
+            <Plus />
+            Compra
+          </button>
+        </Dialog.Trigger>
+      ) : null}
       <Dialog.Portal>
         <Dialog.Overlay className="overlay" />
         <Dialog.Content className="modal">
@@ -132,4 +167,20 @@ export function PurchaseDialog() {
       </Dialog.Portal>
     </Dialog.Root>
   );
+}
+
+function createInitialDraft(initialAverageCost?: number): PurchaseCalculationState {
+  if (!initialAverageCost || initialAverageCost <= 0) {
+    return createEmptyPurchaseCalculation();
+  }
+
+  return {
+    ...createEmptyPurchaseCalculation(),
+    averageCost: formatThousands(String(Math.trunc(initialAverageCost))),
+    origins: {
+      quantity: null,
+      averageCost: "manual",
+      total: null
+    }
+  };
 }

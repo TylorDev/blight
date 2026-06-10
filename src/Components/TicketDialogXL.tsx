@@ -10,6 +10,7 @@ import {
 } from "../Pages/TicketAnalizer/ticket-analizer";
 import { useHistoryStore } from "../stores/history-store";
 import { TicketDialogForm } from "./TicketDialog";
+import "./TicketDialog.scss";
 
 export function TicketDialogXL() {
   const [open, setOpen] = useState(false);
@@ -84,22 +85,22 @@ export function TicketDialogXL() {
       }}
     >
       <Dialog.Trigger asChild>
-        <button className="button primary" type="button">
+        <button className="ticket-dialog__trigger" type="button">
           <Factory />
           TicketXL
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="overlay" />
-        <Dialog.Content className="modal ticket-dialog">
+        <Dialog.Overlay className="ticket-dialog__overlay" />
+        <Dialog.Content className="ticket-dialog">
           {!started ? (
-            <form className="form ticket-dialog__form" onSubmit={start}>
+            <form className="ticket-dialog__form" onSubmit={start}>
               <section className="ticket-dialog__section">
                 <div className="ticket-dialog__section-head">
                   <strong>TicketXL</strong>
                   <span>4 tickets: T5, T6, T7 y T8</span>
                 </div>
-                <p className="modal-copy">
+                <p className="ticket-dialog__copy">
                   Selecciona una receta y un tax global. Estos valores se aplicaran a todo el flujo.
                 </p>
               </section>
@@ -129,7 +130,7 @@ export function TicketDialogXL() {
                 </div>
               </section>
               <div className="ticket-dialog__inputs">
-                <label className="field ticket-dialog__field">
+                <label className="ticket-dialog__field">
                   <span>
                     <BadgeDollarSign />
                     Tax
@@ -145,38 +146,38 @@ export function TicketDialogXL() {
                   />
                 </label>
               </div>
-              {setupError ? <p className="form-error">{setupError}</p> : null}
-              <div className="modal-actions">
-                <button className="button ghost" type="button" onClick={close}>
+              {setupError ? <p className="ticket-dialog__error">{setupError}</p> : null}
+              <div className="ticket-dialog__actions">
+                <button className="ticket-dialog__button ticket-dialog__button--ghost" type="button" onClick={close}>
                   Cancelar
                 </button>
-                <button className="button primary" type="submit">
+                <button className="ticket-dialog__button ticket-dialog__button--primary" type="submit">
                   <Factory />
                   Iniciar TicketXL
                 </button>
               </div>
             </form>
           ) : setupError && createdTickets.length === tiers.length ? (
-            <div className="form ticket-dialog__form">
+            <div className="ticket-dialog__form">
               <section className="ticket-dialog__section">
                 <div className="ticket-dialog__section-head">
                   <strong>TicketXL creado</strong>
                   <span>HistoryXL pendiente</span>
                 </div>
-                <p className="modal-copy">
+                <p className="ticket-dialog__copy">
                   Los 4 tickets XL fueron creados, pero no se pudo guardar el snapshot automatico.
                 </p>
               </section>
-              <p className="form-error">{setupError}</p>
-              <div className="modal-actions">
-                <button className="button primary" type="button" onClick={close}>
+              <p className="ticket-dialog__error">{setupError}</p>
+              <div className="ticket-dialog__actions">
+                <button className="ticket-dialog__button ticket-dialog__button--primary" type="button" onClick={close}>
                   Cerrar
                 </button>
               </div>
             </div>
           ) : (
             <>
-              {setupError ? <p className="form-error">{setupError}</p> : null}
+              {setupError ? <p className="ticket-dialog__error">{setupError}</p> : null}
               <TicketDialogForm
                 active={open}
                 fixedRecipeId={recipeId}
@@ -191,7 +192,7 @@ export function TicketDialogXL() {
             </>
           )}
           <Dialog.Close asChild>
-            <button className="icon-close" aria-label="Cerrar">
+            <button className="ticket-dialog__close" aria-label="Cerrar">
               <X />
             </button>
           </Dialog.Close>

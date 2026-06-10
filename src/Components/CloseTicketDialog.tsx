@@ -1,7 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import { Check, Loader2, X } from "lucide-react";
-import { FormEvent, useMemo, useState } from "react";
-import type { CloseTicketResult, FabricationTicketView } from "../../electron/types";
+import { CSSProperties, FormEvent, useMemo, useState } from "react";
+import type { CloseTicketResult, FabricationTicketView, StaffQualityView } from "../../electron/types";
 import {
   categoryLabels,
   formatNumber,
@@ -9,8 +9,7 @@ import {
   getDefaultFilledDiariesQuantity,
   getRecentLeftoverQuantitySuggestions,
   staffQualities,
-  staffQualityLabels,
-  staffQualityToneClasses
+  staffQualityLabels
 } from "../app-data";
 import { normalizeThousandsInput, parseThousands } from "../number-format";
 import { useHistoryStore } from "../stores/history-store";
@@ -18,6 +17,14 @@ import { useStaffStockStore } from "../stores/staff-stock-store";
 import { useStockStore } from "../stores/stock-store";
 import { useTicketStore } from "../stores/ticket-store";
 import "./CloseTicketDialog.scss";
+
+const staffQualityTones: Record<StaffQualityView, { color: string; ink: string }> = {
+  NORMAL: { color: "#6b7280", ink: "#e5e7eb" },
+  BUENA: { color: "#475569", ink: "#dbeafe" },
+  NOTABLE: { color: "#b07a3f", ink: "#f5d0a2" },
+  SOBRESALIENTE: { color: "#e5e7eb", ink: "#ffffff" },
+  OBRA_MAESTRA: { color: "#d6b446", ink: "#fde68a" }
+};
 
 export function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView }) {
   const [open, setOpen] = useState(false);
@@ -52,6 +59,8 @@ export function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView })
     () => getRecentLeftoverQuantitySuggestions(closedTickets, ticket.tier, "TELAS"),
     [closedTickets, ticket.tier]
   );
+  const defaultLeftoverTablesQuantity = tableSuggestions[0] ?? 0;
+  const defaultLeftoverClothsQuantity = clothSuggestions[0] ?? 0;
   const tableSuggestionsId = `leftover-tables-${ticket.id}`;
   const clothSuggestionsId = `leftover-cloths-${ticket.id}`;
 
@@ -61,8 +70,10 @@ export function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView })
     clearTicketError();
     setMissingMaterials([]);
 
-    const parsedLeftoverTablesQuantity = parseThousands(leftoverTablesQuantity);
-    const parsedLeftoverClothsQuantity = parseThousands(leftoverClothsQuantity);
+    const parsedLeftoverTablesQuantity =
+      leftoverTablesQuantity === "" ? defaultLeftoverTablesQuantity : parseThousands(leftoverTablesQuantity);
+    const parsedLeftoverClothsQuantity =
+      leftoverClothsQuantity === "" ? defaultLeftoverClothsQuantity : parseThousands(leftoverClothsQuantity);
     if (parsedLeftoverTablesQuantity < 1 || parsedLeftoverClothsQuantity < 1) {
       setError("Cantidad de Tablas Sobrantes y Cantidad de Telas Sobrantes deben ser mayores a cero.");
       return;
@@ -114,108 +125,146 @@ export function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView })
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <button className="button primary">
+        <button className="close-ticket-dialog__trigger" type="button">
           <Check />
           Cerrar
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="overlay" />
-        <Dialog.Content className="modal">
-          <Dialog.Title>Cerrar ticket {ticket.tier}</Dialog.Title>
-          <Dialog.Description className="sr-only">
+        <Dialog.Overlay className="close-ticket-dialog__overlay" />
+        <Dialog.Content className="close-ticket-dialog">
+          <div className="close-ticket-dialog__head">
+            <div>
+              <Dialog.Title>Cerrar ticket {ticket.tier}</Dialog.Title>
+              <p className="close-ticket-dialog__subtitle">
+                Registra diarios, sobras y bastones producidos sin modificar los datos base del ticket.
+              </p>
+            </div>
+            <span>{formatNumber(ticket.staffQuantity)} bastones esperados</span>
+          </div>
+          <Dialog.Description className="close-ticket-dialog__description">
             Cierra el ticket registrando diarios llenos y nuevas sobras para futuros tickets.
           </Dialog.Description>
-          <form onSubmit={submit} className="form">
-            <label className="field">
-              Cantidad de diarios llenos
-              <input
-                value={filledDiariesQuantity}
-                onChange={(event) => setFilledDiariesQuantity(normalizeThousandsInput(event.target.value))}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9.]*"
-                placeholder={formatNumber(defaultFilledDiariesQuantity)}
-              />
-            </label>
-            <label className="field">
-              Descuento por diarios llenos
-              <input
-                value={filledDiariesDiscount}
-                onChange={(event) => setFilledDiariesDiscount(normalizeThousandsInput(event.target.value))}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9.]*"
-                placeholder={formatNumber(defaultFilledDiariesDiscount)}
-              />
-            </label>
-            <label className="field">
-              Cantidad de Tablas Sobrantes
-              <input
-                value={leftoverTablesQuantity}
-                onChange={(event) => setLeftoverTablesQuantity(normalizeThousandsInput(event.target.value))}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9.]*"
-                list={tableSuggestionsId}
-              />
-              <datalist id={tableSuggestionsId}>
-                {tableSuggestions.map((quantity) => (
-                  <option key={quantity} value={formatNumber(quantity)} />
-                ))}
-              </datalist>
-            </label>
-            <label className="field">
-              Cantidad de Telas Sobrantes
-              <input
-                value={leftoverClothsQuantity}
-                onChange={(event) => setLeftoverClothsQuantity(normalizeThousandsInput(event.target.value))}
-                type="text"
-                inputMode="numeric"
-                pattern="[0-9.]*"
-                list={clothSuggestionsId}
-              />
-              <datalist id={clothSuggestionsId}>
-                {clothSuggestions.map((quantity) => (
-                  <option key={quantity} value={formatNumber(quantity)} />
-                ))}
-              </datalist>
-            </label>
-            <div className="staff-production-fields">
-              <strong>Bastones creados</strong>
-              {staffQualities.map((quality) => (
-                <label className={`field staff-quality-field ${staffQualityToneClasses[quality]}`} key={quality}>
-                  <span>{staffQualityLabels[quality]}</span>
-                  <input
-                    value={producedStaffs[quality] ?? ""}
-                    onChange={(event) =>
-                      setProducedStaffs((current) => ({
-                        ...current,
-                        [quality]: normalizeThousandsInput(event.target.value)
-                      }))
-                    }
-                    type="text"
-                    inputMode="numeric"
-                    pattern="[0-9.]*"
-                  />
-                </label>
-              ))}
+          <form onSubmit={submit} className="close-ticket-dialog__form">
+            <div className="close-ticket-dialog__body">
+              <section className="close-ticket-dialog__section">
+                <div className="close-ticket-dialog__section-head">
+                  <strong>Cierre y sobras</strong>
+                  <span>Valores finales del craft</span>
+                </div>
+                <div className="close-ticket-dialog__field-grid">
+                  <label className="close-ticket-dialog__field">
+                    <span>Cantidad de diarios llenos</span>
+                    <input
+                      value={filledDiariesQuantity}
+                      onChange={(event) => setFilledDiariesQuantity(normalizeThousandsInput(event.target.value))}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9.]*"
+                      placeholder={formatNumber(defaultFilledDiariesQuantity)}
+                    />
+                  </label>
+                  <label className="close-ticket-dialog__field">
+                    <span>Descuento por diarios llenos</span>
+                    <input
+                      value={filledDiariesDiscount}
+                      onChange={(event) => setFilledDiariesDiscount(normalizeThousandsInput(event.target.value))}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9.]*"
+                      placeholder={formatNumber(defaultFilledDiariesDiscount)}
+                    />
+                  </label>
+                  <label className="close-ticket-dialog__field">
+                    <span>Cantidad de Tablas Sobrantes</span>
+                    <input
+                      value={leftoverTablesQuantity}
+                      onChange={(event) => setLeftoverTablesQuantity(normalizeThousandsInput(event.target.value))}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9.]*"
+                      list={tableSuggestionsId}
+                      placeholder={defaultLeftoverTablesQuantity ? formatNumber(defaultLeftoverTablesQuantity) : ""}
+                    />
+                    <datalist id={tableSuggestionsId}>
+                      {tableSuggestions.map((quantity) => (
+                        <option key={quantity} value={formatNumber(quantity)} />
+                      ))}
+                    </datalist>
+                  </label>
+                  <label className="close-ticket-dialog__field">
+                    <span>Cantidad de Telas Sobrantes</span>
+                    <input
+                      value={leftoverClothsQuantity}
+                      onChange={(event) => setLeftoverClothsQuantity(normalizeThousandsInput(event.target.value))}
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9.]*"
+                      list={clothSuggestionsId}
+                      placeholder={defaultLeftoverClothsQuantity ? formatNumber(defaultLeftoverClothsQuantity) : ""}
+                    />
+                    <datalist id={clothSuggestionsId}>
+                      {clothSuggestions.map((quantity) => (
+                        <option key={quantity} value={formatNumber(quantity)} />
+                      ))}
+                    </datalist>
+                  </label>
+                </div>
+              </section>
+              <section className="close-ticket-dialog__section close-ticket-dialog__section--production">
+                <div className="close-ticket-dialog__section-head">
+                  <strong>Bastones creados</strong>
+                  <span>Debe sumar {formatNumber(ticket.staffQuantity)}</span>
+                </div>
+                <div className="close-ticket-dialog__quality-grid">
+                  {staffQualities.map((quality) => {
+                    const tone = staffQualityTones[quality];
+
+                    return (
+                      <label
+                        className="close-ticket-dialog__quality-field"
+                        key={quality}
+                        style={
+                          {
+                            "--close-ticket-quality-color": tone.color,
+                            "--close-ticket-quality-ink": tone.ink
+                          } as CSSProperties
+                        }
+                      >
+                        <span>{staffQualityLabels[quality]}</span>
+                        <input
+                          value={producedStaffs[quality] ?? ""}
+                          onChange={(event) =>
+                            setProducedStaffs((current) => ({
+                              ...current,
+                              [quality]: normalizeThousandsInput(event.target.value)
+                            }))
+                          }
+                          type="text"
+                          inputMode="numeric"
+                          pattern="[0-9.]*"
+                        />
+                      </label>
+                    );
+                  })}
+                </div>
+              </section>
             </div>
-            {error ? <p className="form-error">{error}</p> : null}
-            <div className="modal-actions">
+            {error ? <p className="close-ticket-dialog__error">{error}</p> : null}
+            <div className="close-ticket-dialog__actions">
               <Dialog.Close asChild>
-                <button className="button ghost" type="button">
+                <button className="close-ticket-dialog__button close-ticket-dialog__button--ghost" type="button">
                   Cancelar
                 </button>
               </Dialog.Close>
-              <button className="button primary" type="submit" disabled={saving}>
-                {saving ? <Loader2 className="spin" /> : <Check />}
+              <button className="close-ticket-dialog__button close-ticket-dialog__button--primary" type="submit" disabled={saving}>
+                {saving ? <Loader2 className="close-ticket-dialog__spin" /> : <Check />}
                 Cerrar
               </button>
             </div>
           </form>
           <Dialog.Close asChild>
-            <button className="icon-close" aria-label="Cerrar">
+            <button className="close-ticket-dialog__close" aria-label="Cerrar">
               <X />
             </button>
           </Dialog.Close>
@@ -226,6 +275,26 @@ export function CloseTicketDialog({ ticket }: { ticket: FabricationTicketView })
 }
 
 function getDefaultProducedStaffs(staffQuantity: number) {
+  if (staffQuantity === 6) {
+    return {
+      NORMAL: "0",
+      BUENA: "3",
+      NOTABLE: "3",
+      SOBRESALIENTE: "0",
+      OBRA_MAESTRA: "0"
+    };
+  }
+
+  if (staffQuantity === 7) {
+    return {
+      NORMAL: "0",
+      BUENA: "4",
+      NOTABLE: "3",
+      SOBRESALIENTE: "0",
+      OBRA_MAESTRA: "0"
+    };
+  }
+
   return Object.fromEntries(staffQualities.map((quality, index) => [quality, index === 0 ? String(staffQuantity) : ""]));
 }
 

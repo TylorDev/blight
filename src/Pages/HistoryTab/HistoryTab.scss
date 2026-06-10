@@ -2,6 +2,7 @@
   display: grid;
   gap: 12px;
   padding: 16px;
+
 }
 
 .history-item {
@@ -60,24 +61,6 @@
     font-size: 11px;
     font-weight: 600;
     text-transform: uppercase;
-  }
-}
-
-.history-modal {
-  width: min(640px, calc(100vw - 32px));
-  max-height: calc(100vh - 48px);
-  overflow: auto;
-}
-
-.history-modal__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-
-  span {
-    color: #a1a1aa;
-    font-size: 12px;
   }
 }
 

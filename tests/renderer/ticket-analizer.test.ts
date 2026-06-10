@@ -8,6 +8,7 @@ import {
   createEmptyTicketAnalizerHistorySummary,
   createTicketQualityOverrideKey,
   defaultTicketAnalizerTaxPercentages,
+  getTicketAnalizerValuesFromManualState,
   normalizeTicketAnalizerPercentInput,
   parseTicketAnalizerPercentInput,
   selectLatestXlTickets
@@ -324,6 +325,49 @@ describe("ticket-analizer", () => {
       totalCost: 0,
       totalQuantity: 0
     });
+  });
+
+  it("converts saved HistoryXL manual state into analyzable values", () => {
+    const manualState = createDefaultTicketAnalizerHistoryManualState();
+    manualState.saleInputsByPower[1560] = "600.000";
+    manualState.exceptionInputs["T8:NORMAL"] = "900.000";
+    manualState.saleOrderTaxInput = "2";
+    manualState.saleTaxInput = "3";
+    manualState.unitCostDrafts = { "XL-0001": "450.000" };
+    manualState.quantityDrafts = { [createTicketQualityOverrideKey("XL-0001", "NORMAL")]: "2" };
+
+    expect(getTicketAnalizerValuesFromManualState(manualState)).toMatchObject({
+      editOverrides: {
+        quantityByTicketAndQuality: { "XL-0001:NORMAL": 2 },
+        unitCostByTicketId: { "XL-0001": 450000 }
+      },
+      saleValueByPower: { 1560: 600000 },
+      saleValueExceptions: { "T8:NORMAL": 900000 },
+      taxPercentages: { saleOrderTaxPercent: 2, saleTaxPercent: 3 }
+    });
+  });
+
+  it("recalculates a zero HistoryXL snapshot summary from closed tickets", () => {
+    const manualState = createDefaultTicketAnalizerHistoryManualState();
+    const values = getTicketAnalizerValuesFromManualState(manualState);
+    const analysis = analyzeTickets(
+      [
+        xlTicket("XL-0001", "T5", undefined, [produced("NORMAL", 2)]),
+        xlTicket("XL-0002", "T6"),
+        xlTicket("XL-0003", "T7"),
+        xlTicket("XL-0004", "T8")
+      ],
+      ["XL-0001", "XL-0002", "XL-0003", "XL-0004"],
+      values.saleValueByPower,
+      values.saleValueExceptions,
+      values.editOverrides,
+      values.taxPercentages
+    );
+
+    expect(createEmptyTicketAnalizerHistorySummary()).toMatchObject({ netProfit: 0, totalQuantity: 0 });
+    expect(analysis.errors).toEqual([]);
+    expect(analysis.financialSummary.netProfit).toBeGreaterThan(0);
+    expect(analysis.financialSummary.totalQuantity).toBe(5);
   });
 });
 

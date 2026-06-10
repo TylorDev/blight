@@ -1,9 +1,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
-import { CircleDollarSign, ReceiptText, X } from "lucide-react";
+import { CircleDollarSign, X } from "lucide-react";
 import type { PurchaseInvoiceView } from "../../../electron/types";
-import { Metric } from "../../Components";
 import {
-  categories,
   categoryLabels,
   formatCurrency,
   formatDate,
@@ -11,29 +9,24 @@ import {
   purchaseVendorLabels
 } from "../../app-data";
 import { usePurchaseStore } from "../../stores/purchase-store";
-import { useStockStore } from "../../stores/stock-store";
 import "./BuyPage.scss";
 
 export function BuyPage() {
-  const stock = useStockStore((state) => state.stock);
   const invoices = usePurchaseStore((state) => state.invoices);
-  const totalInvestment = stock.reduce((total, item) => total + item.total, 0);
-  const categorySummaries = categories.map((category) => {
-    const items = stock.filter((item) => item.category === category);
-    return {
-      category,
-      quantity: items.reduce((total, item) => total + item.quantity, 0),
-      total: items.reduce((total, item) => total + item.total, 0)
-    };
-  });
-  const visibleStock = stock.filter((item) => item.quantity > 0 || item.total > 0);
+  const invoiceTotalInvestment = invoices.reduce((total, invoice) => total + invoice.total, 0);
 
   return (
     <div className="buy-page">
-    
-
-    
-
+      <section className="buy-summary" aria-label="Resumen de compras">
+        <article className="buy-summary__item">
+          <span className="buy-summary__icon">
+            <CircleDollarSign />
+          </span>
+          <span className="buy-summary__label">Total invertido</span>
+          <strong className="buy-summary__value">{formatCurrency(invoiceTotalInvestment)}</strong>
+          <small>{formatNumber(invoices.length)} facturas</small>
+        </article>
+      </section>
 
       <section className="panel">
         <div className="panel-head">

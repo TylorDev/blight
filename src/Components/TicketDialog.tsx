@@ -20,6 +20,7 @@ import { useStockStore } from "../stores/stock-store";
 import { useTicketStore } from "../stores/ticket-store";
 import { Recipe } from "./Recipe";
 import { TicketPreview } from "./TicketPreview";
+import "./TicketDialog.scss";
 
 const tierColors: Record<AppTier, string> = {
   T5: "#76221A",
@@ -50,14 +51,14 @@ export function TicketDialog({ triggerLabel = "Ticket", ...formProps }: TicketDi
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>
-        <button className="button primary">
+        <button className="ticket-dialog__trigger" type="button">
           <Factory />
           {triggerLabel}
         </button>
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="overlay" />
-        <Dialog.Content className="modal ticket-dialog">
+        <Dialog.Overlay className="ticket-dialog__overlay" />
+        <Dialog.Content className="ticket-dialog">
           <TicketDialogForm
             {...formProps}
             active={open}
@@ -68,7 +69,7 @@ export function TicketDialog({ triggerLabel = "Ticket", ...formProps }: TicketDi
             }}
           />
           <Dialog.Close asChild>
-            <button className="icon-close" aria-label="Cerrar">
+            <button className="ticket-dialog__close" aria-label="Cerrar">
               <X />
             </button>
           </Dialog.Close>
@@ -146,8 +147,8 @@ export function TicketDialogForm({
   };
 
   return (
-    <form onSubmit={submit} className="form ticket-dialog__form">
-      {stepLabel ? <p className="modal-copy">{stepLabel}</p> : null}
+    <form onSubmit={submit} className="ticket-dialog__form">
+      {stepLabel ? <p className="ticket-dialog__copy">{stepLabel}</p> : null}
       <section className="ticket-dialog__section">
         <div className="ticket-dialog__section-head">
           <strong>Tier de fabricacion</strong>
@@ -197,7 +198,7 @@ export function TicketDialogForm({
         </div>
       </section>
       <div className="ticket-dialog__inputs">
-        <label className="field ticket-dialog__field">
+        <label className="ticket-dialog__field">
           <span>
             <BadgeDollarSign />
             Tax
@@ -213,14 +214,14 @@ export function TicketDialogForm({
             disabled={taxLocked}
           />
         </label>
-        <label className="field ticket-dialog__field">
+        <label className="ticket-dialog__field">
           <span>
             <WandSparkles />
             Cantidad Bastones Total
           </span>
           <input value={String(preview.staffQuantity)} readOnly />
         </label>
-        <label className="field ticket-dialog__field">
+        <label className="ticket-dialog__field">
           <span>
             <Gauge />
             Foco
@@ -228,7 +229,7 @@ export function TicketDialogForm({
           <input value={formatNumber(preview.focusCost)} readOnly />
         </label>
       </div>
-      {loadingLeftovers ? <p className="modal-copy">Buscando sobras disponibles...</p> : null}
+      {loadingLeftovers ? <p className="ticket-dialog__copy">Buscando sobras disponibles...</p> : null}
       {!loadingLeftovers && pendingLeftovers.length > 0 ? (
         <div className="leftover-note">
           <div className="leftover-note__head">
@@ -252,16 +253,21 @@ export function TicketDialogForm({
           <strong>Receta efectiva</strong>
           <span>Stock y sobras ya considerados</span>
         </div>
-        <Recipe tier={selectedTier} recipeId={selectedRecipeId} leftoverCredits={pendingLeftovers} />
+        <Recipe
+          className="ticket-dialog__recipe-summary"
+          tier={selectedTier}
+          recipeId={selectedRecipeId}
+          leftoverCredits={pendingLeftovers}
+        />
       </section>
       <TicketPreview preview={preview} />
-      {error ? <p className="form-error">{error}</p> : null}
-      <div className="modal-actions">
-        <button className="button ghost" type="button" onClick={onCancel}>
+      {error ? <p className="ticket-dialog__error">{error}</p> : null}
+      <div className="ticket-dialog__actions">
+        <button className="ticket-dialog__button ticket-dialog__button--ghost" type="button" onClick={onCancel}>
           Cancelar
         </button>
-        <button className="button primary" type="submit" disabled={saving}>
-          {saving ? <Loader2 className="spin" /> : <Plus />}
+        <button className="ticket-dialog__button ticket-dialog__button--primary" type="submit" disabled={saving}>
+          {saving ? <Loader2 className="ticket-dialog__spin" /> : <Plus />}
           {submitLabel}
         </button>
       </div>

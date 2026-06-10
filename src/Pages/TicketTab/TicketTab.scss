@@ -1,3 +1,88 @@
+.ticket-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(220px, 0.45fr);
+  gap: 12px;
+  border-top: 1px solid #18181b;
+  padding: 14px 16px;
+}
+
+.ticket-summary__group,
+.ticket-summary__item {
+  min-width: 0;
+  border: 1px solid #27272a;
+  border-radius: 8px;
+  background:
+    linear-gradient(135deg, rgba(250, 250, 250, 0.04), rgba(250, 250, 250, 0)),
+    #09090b;
+}
+
+.ticket-summary__group {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.ticket-summary__group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+
+  strong {
+    color: #f4f4f5;
+    font-size: 13px;
+  }
+
+  span {
+    color: #a1a1aa;
+    font-size: 12px;
+    font-weight: 700;
+    white-space: nowrap;
+  }
+}
+
+.ticket-summary__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.ticket-summary__item {
+  display: grid;
+  gap: 5px;
+  padding: 10px;
+}
+
+.ticket-summary__label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: #a1a1aa;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.ticket-summary__value {
+  min-width: 0;
+  color: #fafafa;
+  font-size: 16px;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.ticket-summary__item--total {
+  align-content: center;
+  padding: 16px;
+  background:
+    linear-gradient(135deg, rgba(250, 250, 250, 0.08), rgba(250, 250, 250, 0)),
+    #111113;
+
+  .ticket-summary__value {
+    font-size: 22px;
+  }
+}
+
 .ticket-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
@@ -46,5 +131,31 @@
   span {
     color: #a1a1aa;
     font-size: 13px;
+  }
+}
+
+@media (max-width: 1180px) {
+  .ticket-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-summary__item--total {
+    align-content: start;
+  }
+}
+
+@media (max-width: 520px) {
+  .ticket-summary {
+    padding: 12px;
+  }
+
+  .ticket-summary__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ticket-summary__value,
+  .ticket-summary__item--total .ticket-summary__value {
+    font-size: 15px;
+    white-space: normal;
   }
 }

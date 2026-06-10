@@ -160,6 +160,49 @@ export function createEmptyTicketAnalizerHistorySummary(): TicketAnalizerHistory
   };
 }
 
+export function getTicketAnalizerValuesFromManualState(manualState: TicketAnalizerHistoryManualState) {
+  const saleValueByPower = createDefaultSaleValueByPower();
+  for (const power of ticketAnalizerPowers) {
+    const inputValue = manualState.saleInputsByPower[String(power)] ?? manualState.saleInputsByPower[power] ?? "";
+    const parsed = parseSavedThousandsInput(inputValue);
+    saleValueByPower[power] =
+      parsed > 0 ? parsed : manualState.effectiveSaleValueByPower[String(power)] ?? saleValueByPower[power];
+  }
+
+  const saleValueExceptions = createDefaultSaleValueExceptions();
+  for (const key of Object.keys(saleValueExceptions) as SaleValueExceptionKey[]) {
+    const parsed = parseSavedThousandsInput(manualState.exceptionInputs[key] ?? "");
+    saleValueExceptions[key] = parsed > 0 ? parsed : manualState.effectiveSaleValueExceptions[key] ?? saleValueExceptions[key];
+  }
+
+  const unitCostByTicketId: Record<string, number> = {};
+  for (const [ticketId, draft] of Object.entries(manualState.unitCostDrafts)) {
+    if (draft.trim() !== "") {
+      unitCostByTicketId[ticketId] = parseSavedThousandsInput(draft);
+    }
+  }
+
+  const quantityByTicketAndQuality: Record<string, number> = {};
+  for (const [key, draft] of Object.entries(manualState.quantityDrafts)) {
+    if (draft.trim() !== "") {
+      quantityByTicketAndQuality[key] = parseSavedThousandsInput(draft);
+    }
+  }
+
+  return {
+    editOverrides: { quantityByTicketAndQuality, unitCostByTicketId },
+    saleValueByPower,
+    saleValueExceptions,
+    taxPercentages: {
+      saleOrderTaxPercent: parseTicketAnalizerPercentInput(
+        manualState.saleOrderTaxInput,
+        manualState.effectiveTaxPercentages.saleOrderTaxPercent
+      ),
+      saleTaxPercent: parseTicketAnalizerPercentInput(manualState.saleTaxInput, manualState.effectiveTaxPercentages.saleTaxPercent)
+    }
+  };
+}
+
 export function analyzeTickets(
   tickets: FabricationTicketView[],
   manualTicketIds: string[],
@@ -215,6 +258,12 @@ export function parseTicketAnalizerPercentInput(value: string, fallback: number)
   }
 
   return parsed;
+}
+
+function parseSavedThousandsInput(value: string) {
+  const normalized = value.replace(/\./g, "").replace(/,/g, ".").replace(/[^0-9.]/g, "");
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 export function calculateTicketAnalizerFinancialSummary(
